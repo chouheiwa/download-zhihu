@@ -1,22 +1,22 @@
 /**
- * 内容脚本：检测当前知乎页面类型并通知 popup
- * 在知乎页面加载完成后运行
+ * 数据层：知乎页面检测 + 内容提取 + 收藏夹 API
+ * 所有函数挂载到 window.__zhihuDownloader 供 floating-ui.js 调用
  */
 
 (() => {
   'use strict';
 
-  /**
-   * 知乎页面类型检测
-   * @param {string} url - 页面 URL
-   * @returns {{ type: string, id: string } | null}
-   */
-  function detectZhihuPage(url) {
+  // ============================
+  // 页面类型检测
+  // ============================
+
+  function detectPage(url) {
     const patterns = [
       { type: 'answer', regex: /zhihu\.com\/question\/(\d+)\/answer\/(\d+)/ },
       { type: 'article', regex: /zhuanlan\.zhihu\.com\/p\/(\d+)/ },
-      { type: 'question', regex: /zhihu\.com\/question\/(\d+)$/ },
+      { type: 'question', regex: /zhihu\.com\/question\/(\d+)\/?(\?|$|#)/ },
       { type: 'pin', regex: /zhihu\.com\/pin\/(\d+)/ },
+      { type: 'collection', regex: /zhihu\.com\/collection\/(\d+)/ },
     ];
 
     for (const { type, regex } of patterns) {
@@ -29,53 +29,27 @@
     return null;
   }
 
-  // 响应来自 popup 的消息
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'detect') {
-      const result = detectZhihuPage(window.location.href);
-      sendResponse(result);
-      return true;
-    }
+  // ============================
+  // 单篇内容提取
+  // ============================
 
-    if (message.action === 'extract') {
-      try {
-        const data = extractContent();
-        sendResponse({ success: true, data });
-      } catch (error) {
-        sendResponse({ success: false, error: error.message });
-      }
-      return true;
-    }
-  });
-
-  /**
-   * 从当前页面提取内容
-   * 优先从 js-initialData 提取，回退到 DOM 提取
-   */
   function extractContent() {
     const url = window.location.href;
-    const pageInfo = detectZhihuPage(url);
-    if (!pageInfo) {
-      throw new Error('当前页面不是有效的知乎内容页');
+    const pageInfo = detectPage(url);
+    if (!pageInfo || pageInfo.type === 'collection') {
+      return null;
     }
 
-    // 尝试从 js-initialData 提取
     const initialData = extractInitialData();
     if (initialData) {
       return extractFromInitialData(initialData, pageInfo, url);
     }
-
-    // 回退到 DOM 提取
     return extractFromDOM(pageInfo, url);
   }
 
-  /**
-   * 提取 js-initialData JSON
-   */
   function extractInitialData() {
     const scriptTag = document.querySelector('script#js-initialData[type="text/json"]');
     if (!scriptTag || !scriptTag.textContent) return null;
-
     try {
       return JSON.parse(scriptTag.textContent);
     } catch {
@@ -83,9 +57,6 @@
     }
   }
 
-  /**
-   * 从 initialData JSON 提取内容
-   */
   function extractFromInitialData(jsonData, pageInfo, url) {
     const { type, id } = pageInfo;
 
@@ -93,49 +64,40 @@
       case 'answer': {
         const questionMatch = url.match(/question\/(\d+)/);
         const questionId = questionMatch ? questionMatch[1] : '';
-        const answerData = jsonData?.initialState?.entities?.answers?.[id];
+        const data = jsonData?.initialState?.entities?.answers?.[id];
         return {
-          type,
-          url,
-          title: answerData?.question?.title || `知乎问题${questionId}`,
-          author: answerData?.author?.name || '知乎用户',
-          html: answerData?.content || '',
+          type, url,
+          title: data?.question?.title || `知乎问题${questionId}`,
+          author: data?.author?.name || '知乎用户',
+          html: data?.content || '',
         };
       }
       case 'article': {
-        const articleData = jsonData?.initialState?.entities?.articles?.[id];
+        const data = jsonData?.initialState?.entities?.articles?.[id];
         return {
-          type,
-          url,
-          title: articleData?.title || `知乎文章${id}`,
-          author: articleData?.author?.name || '知乎用户',
-          html: articleData?.content || '',
+          type, url,
+          title: data?.title || `知乎文章${id}`,
+          author: data?.author?.name || '知乎用户',
+          html: data?.content || '',
         };
       }
       case 'question': {
-        const questionData = jsonData?.initialState?.entities?.questions?.[id];
-        const questionDetail = questionData?.detail || '';
-        const title = questionData?.title || `知乎问题${id}`;
-        const asker = questionData?.author?.name || '知乎用户';
+        const data = jsonData?.initialState?.entities?.questions?.[id];
+        const detail = data?.detail || '';
+        const title = data?.title || `知乎问题${id}`;
+        const asker = data?.author?.name || '知乎用户';
 
-        // 附上问题下的回答
         const answers = jsonData?.initialState?.entities?.answers || {};
         let answersHtml = '';
         for (const key in answers) {
           const answer = answers[key];
-          const answerAuthor = answer?.author?.name || '知乎用户';
-          const answerUrl = `https://www.zhihu.com/question/${id}/answer/${answer?.id}`;
-          answersHtml += `<h1><a href="${answerUrl}">${answerAuthor}的回答</a></h1>`;
+          const aAuthor = answer?.author?.name || '知乎用户';
+          const aUrl = `https://www.zhihu.com/question/${id}/answer/${answer?.id}`;
+          answersHtml += `<h1><a href="${aUrl}">${aAuthor}的回答</a></h1>`;
           answersHtml += `<div>${answer?.content || ''}</div>`;
         }
 
-        return {
-          type,
-          url,
-          title,
-          author: asker,
-          html: questionDetail + answersHtml,
-        };
+        return { type, url, title, author: asker, html: detail + answersHtml };
       }
       case 'pin': {
         const pinData = jsonData?.initialState?.entities?.pins?.[id];
@@ -143,50 +105,41 @@
 
         let author = '知乎用户';
         for (const key in users) {
-          if (users[key]?.name) {
-            author = users[key].name;
-            break;
-          }
+          if (users[key]?.name) { author = users[key].name; break; }
         }
 
         const contentHtml = typeof pinData?.contentHtml === 'string' ? pinData.contentHtml : '';
         const contentArr = Array.isArray(pinData?.content) ? pinData.content : [];
         const imgsHtml = contentArr
-          .filter((entry) => entry?.type === 'image' && entry?.originalUrl)
-          .map((entry) => {
-            const w = entry.width ? ` width="${entry.width}"` : '';
-            const h = entry.height ? ` height="${entry.height}"` : '';
-            return `<img src="${entry.originalUrl}" alt=""${w}${h} />`;
+          .filter((e) => e?.type === 'image' && e?.originalUrl)
+          .map((e) => {
+            const w = e.width ? ` width="${e.width}"` : '';
+            const h = e.height ? ` height="${e.height}"` : '';
+            return `<img src="${e.originalUrl}" alt=""${w}${h} />`;
           })
           .join('\n');
 
         return {
-          type,
-          url,
+          type, url,
           title: `想法${id}`,
           author,
           html: contentHtml + (imgsHtml ? `<div>${imgsHtml}</div>` : ''),
         };
       }
       default:
-        throw new Error(`不支持的类型: ${type}`);
+        return null;
     }
   }
 
-  /**
-   * DOM 回退提取（当 js-initialData 不可用时）
-   */
   function extractFromDOM(pageInfo, url) {
     const { type } = pageInfo;
-
     switch (type) {
       case 'article': {
         const titleEl = document.querySelector('.Post-Title');
         const contentEl = document.querySelector('.Post-RichText');
         const authorEl = document.querySelector('.AuthorInfo-name .UserLink-link');
         return {
-          type,
-          url,
+          type, url,
           title: titleEl?.textContent?.trim() || '知乎文章',
           author: authorEl?.textContent?.trim() || '知乎用户',
           html: contentEl?.innerHTML || '',
@@ -197,8 +150,7 @@
         const contentEl = document.querySelector('.RichContent-inner');
         const authorEl = document.querySelector('.AuthorInfo-name .UserLink-link');
         return {
-          type,
-          url,
+          type, url,
           title: titleEl?.textContent?.trim() || '知乎回答',
           author: authorEl?.textContent?.trim() || '知乎用户',
           html: contentEl?.innerHTML || '',
@@ -208,8 +160,7 @@
         const titleEl = document.querySelector('.QuestionHeader-title');
         const detailEl = document.querySelector('.QuestionRichText--collapsed, .QuestionRichText--expandable');
         return {
-          type,
-          url,
+          type, url,
           title: titleEl?.textContent?.trim() || '知乎问题',
           author: '知乎用户',
           html: detailEl?.innerHTML || '',
@@ -218,15 +169,89 @@
       case 'pin': {
         const contentEl = document.querySelector('.PinItem-contentWrapper');
         return {
-          type,
-          url,
+          type, url,
           title: '知乎想法',
           author: '知乎用户',
           html: contentEl?.innerHTML || '',
         };
       }
       default:
-        throw new Error(`不支持的类型: ${type}`);
+        return null;
     }
   }
+
+  // ============================
+  // 收藏夹
+  // ============================
+
+  function getCollectionInfo() {
+    const url = window.location.href;
+    const match = url.match(/zhihu\.com\/collection\/(\d+)/);
+    if (!match) return null;
+
+    const id = match[1];
+
+    // 尝试多种选择器获取收藏夹标题
+    const titleEl =
+      document.querySelector('.CollectionDetailPageHeader-title') ||
+      document.querySelector('[class*="CollectionDetail"] h2') ||
+      document.querySelector('h1');
+
+    return {
+      id,
+      title: titleEl?.textContent?.trim() || `收藏夹${id}`,
+      itemCount: 0, // 由 API 获取真实数量
+      apiUrl: `https://www.zhihu.com/api/v4/collections/${id}/items?offset=0&limit=20`,
+    };
+  }
+
+  async function fetchCollectionPage(apiUrl) {
+    const response = await fetch(apiUrl, {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API 请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const paging = data.paging || {};
+    const items = (data.data || []).map((item) => {
+      const c = item.content || {};
+      const type = c.type || 'unknown';
+
+      let title = '';
+      if (type === 'article') {
+        title = c.title || '';
+      } else if (type === 'answer') {
+        title = c.question?.title || '';
+      }
+
+      return {
+        type,
+        url: c.url || '',
+        title,
+        author: c.author?.name || '知乎用户',
+        html: c.content || '',
+      };
+    });
+
+    return {
+      items,
+      nextUrl: paging.is_end ? null : (paging.next || null),
+      totals: paging.totals || 0,
+    };
+  }
+
+  // ============================
+  // 导出到 window
+  // ============================
+
+  window.__zhihuDownloader = {
+    detectPage,
+    extractContent,
+    getCollectionInfo,
+    fetchCollectionPage,
+  };
 })();

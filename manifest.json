@@ -1,21 +1,13 @@
 {
   "manifest_version": 3,
   "name": "知乎文章下载器",
-  "description": "将知乎文章、回答、问题、想法导出为 Markdown 文件",
-  "version": "1.0.0",
+  "description": "将知乎文章、回答、问题、想法、收藏夹导出为 Markdown 文件",
+  "version": "1.1.0",
   "permissions": ["activeTab"],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "action": {
-    "default_popup": "popup/popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
   },
   "content_scripts": [
     {
@@ -23,8 +15,20 @@
         "https://www.zhihu.com/*",
         "https://zhuanlan.zhihu.com/*"
       ],
-      "js": ["content/detector.js"],
+      "js": [
+        "lib/turndown.js",
+        "lib/jszip.min.js",
+        "lib/html-to-markdown.js",
+        "content/detector.js",
+        "content/floating-ui.js"
+      ],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon48.png"],
+      "matches": ["https://www.zhihu.com/*", "https://zhuanlan.zhihu.com/*"]
     }
   ]
 }
