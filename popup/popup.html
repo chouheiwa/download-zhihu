@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>知乎文章下载器</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="title">知乎文章下载器</h1>
+    </header>
+
+    <!-- 非知乎页面时显示 -->
+    <div id="not-zhihu" class="status-card hidden">
+      <div class="status-icon">📄</div>
+      <p class="status-text">请在知乎页面上使用此扩展</p>
+      <p class="status-hint">支持：文章、回答、问题、想法</p>
+    </div>
+
+    <!-- 知乎页面检测到内容时显示 -->
+    <div id="zhihu-detected" class="content-card hidden">
+      <div class="info-row">
+        <span class="label">类型</span>
+        <span id="content-type" class="value badge"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">标题</span>
+        <span id="content-title" class="value title-text"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">作者</span>
+        <span id="content-author" class="value"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">图片</span>
+        <span id="content-images" class="value"></span>
+      </div>
+
+      <div class="options">
+        <label class="option-item">
+          <span>包含 Front Matter</span>
+          <input type="checkbox" id="opt-frontmatter" checked>
+        </label>
+        <label class="option-item">
+          <span>下载图片到本地</span>
+          <input type="checkbox" id="opt-images" checked>
+        </label>
+      </div>
+
+      <!-- 下载进度 -->
+      <div id="progress-area" class="progress-area hidden">
+        <div class="progress-bar-track">
+          <div id="progress-bar" class="progress-bar-fill"></div>
+        </div>
+        <p id="progress-text" class="progress-text">准备中...</p>
+      </div>
+
+      <button id="btn-download" class="btn-primary">
+        下载 Markdown
+      </button>
+    </div>
+
+    <!-- 加载状态 -->
+    <div id="loading" class="status-card hidden">
+      <div class="spinner"></div>
+      <p class="status-text">正在提取内容...</p>
+    </div>
+
+    <!-- 错误状态 -->
+    <div id="error" class="status-card hidden">
+      <div class="status-icon">⚠️</div>
+      <p id="error-text" class="status-text error-text"></p>
+    </div>
+  </div>
+
+  <script src="../lib/turndown.js"></script>
+  <script src="../lib/jszip.min.js"></script>
+  <script src="../lib/html-to-markdown.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

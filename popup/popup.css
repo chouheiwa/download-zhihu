@@ -1,0 +1,201 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  color: #1a1a2e;
+  background: #f8f9fa;
+}
+
+.container {
+  padding: 16px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0066ff;
+}
+
+/* 状态卡片 */
+.status-card {
+  text-align: center;
+  padding: 24px 16px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.status-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.status-text {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.status-hint {
+  font-size: 12px;
+  color: #999;
+}
+
+.error-text {
+  color: #e74c3c;
+}
+
+/* 内容卡片 */
+.content-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.label {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #888;
+  min-width: 36px;
+  padding-top: 2px;
+}
+
+.value {
+  font-size: 14px;
+  color: #333;
+  word-break: break-word;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e8f4fd;
+  color: #0066ff;
+}
+
+.title-text {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 选项 */
+.options {
+  border-top: 1px solid #eee;
+  margin: 12px 0;
+  padding-top: 12px;
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: #555;
+}
+
+.option-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #0066ff;
+  cursor: pointer;
+}
+
+/* 进度条 */
+.progress-area {
+  margin-top: 12px;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 6px;
+  background: #e9ecef;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0;
+  background: #0066ff;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #888;
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* 按钮 */
+.btn-primary {
+  width: 100%;
+  padding: 10px;
+  margin-top: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #0066ff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover {
+  background: #0052cc;
+}
+
+.btn-primary:active {
+  background: #003d99;
+}
+
+.btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* 加载动画 */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #0066ff;
+  border-radius: 50%;
+  margin: 0 auto 12px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 工具类 */
+.hidden {
+  display: none !important;
+}
