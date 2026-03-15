@@ -1,4 +1,5 @@
 .DS_Store
 *.crx
 *.pem
+*.har
 node_modules/
