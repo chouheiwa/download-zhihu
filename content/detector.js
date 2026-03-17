@@ -281,7 +281,7 @@
 
   async function fetchChildComments(rootCommentId) {
     const children = [];
-    let nextUrl = `https://www.zhihu.com/api/v4/comment_v5/comment/${rootCommentId}/anchor_comment?order_by=score&limit=20&offset=`;
+    let nextUrl = `https://www.zhihu.com/api/v4/comment_v5/comment/${rootCommentId}/child_comment?order_by=ts&limit=20&offset=`;
 
     while (nextUrl) {
       const response = await fetch(nextUrl, {

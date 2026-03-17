@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "知乎文章下载器",
   "description": "将知乎文章、回答、问题、想法、收藏夹导出为 Markdown 文件",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "permissions": ["activeTab"],
   "icons": {
     "16": "icons/icon16.png",
@@ -20,6 +20,9 @@
         "lib/jszip.min.js",
         "lib/html-to-markdown.js",
         "content/detector.js",
+        "content/export-utils.js",
+        "content/article-panel.js",
+        "content/collection-panel.js",
         "content/floating-ui.js"
       ],
       "run_at": "document_idle"
