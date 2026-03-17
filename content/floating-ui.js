@@ -518,6 +518,10 @@
           <span>下载图片到本地</span>
           <input type="checkbox" id="col-opt-img" checked>
         </label>
+        <label class="option-item">
+          <span>导出评论区</span>
+          <input type="checkbox" id="col-opt-comment">
+        </label>
       </div>
       <div class="export-mode">
         <div class="export-mode-title">导出方式</div>
@@ -542,6 +546,7 @@
       btn: body.querySelector('#btn-export'),
       optFm: body.querySelector('#col-opt-fm'),
       optImg: body.querySelector('#col-opt-img'),
+      optComment: body.querySelector('#col-opt-comment'),
       progressWrap: body.querySelector('#col-progress-wrap'),
       progressBar: body.querySelector('#col-progress-bar'),
       progressLabel: body.querySelector('#col-progress-label'),
@@ -591,6 +596,7 @@
 
       const wantImages = refs.optImg.checked;
       const wantFm = refs.optFm.checked;
+      const wantComment = refs.optComment.checked;
       const collectionName = sanitizeFilename(info.title);
       const zip = new JSZip();
       const rootFolder = zip.folder(collectionName);
@@ -643,6 +649,58 @@
 
         let md = htmlToMarkdown(item.html || '', imageMapping);
         if (wantFm) md = buildFrontmatter(item) + md;
+
+        // 评论处理
+        if (wantComment) {
+          showProgress(refs, num, allItems.length, `正在加载评论 ${num}/${allItems.length}...`);
+          try {
+            const contentId = extractContentId(item);
+            if (contentId) {
+              const comments = await api.fetchAllComments(item.type, contentId, null);
+              if (comments.length > 0) {
+                let commentImageMapping = {};
+                if (wantImages) {
+                  const commentPrefix = `${String(num).padStart(3, '0')}_comment_`;
+                  let commentImgIdx = 0;
+                  for (const c of comments) {
+                    for (const url of extractCommentImageUrls(c.content || '')) {
+                      commentImgIdx++;
+                      const imgResult = await downloadImage(url);
+                      if (imgResult) {
+                        const imgName = `${commentPrefix}${String(commentImgIdx).padStart(3, '0')}${imgResult.ext}`;
+                        commentImageMapping[url] = `images/${imgName}`;
+                        imagesFolder.file(imgName, imgResult.buffer);
+                      }
+                    }
+                    for (const child of (c.child_comments || [])) {
+                      for (const url of extractCommentImageUrls(child.content || '')) {
+                        commentImgIdx++;
+                        const imgResult = await downloadImage(url);
+                        if (imgResult) {
+                          const imgName = `${commentPrefix}${String(commentImgIdx).padStart(3, '0')}${imgResult.ext}`;
+                          commentImageMapping[url] = `images/${imgName}`;
+                          imagesFolder.file(imgName, imgResult.buffer);
+                        }
+                      }
+                    }
+                  }
+                }
+
+                const commentMd = buildCommentsMarkdown(
+                  comments,
+                  item.title || `${item.author}的${typeLabel}`,
+                  commentImageMapping
+                );
+                const commentFilename = `${baseName}-评论.md`;
+                articlesFolder.file(commentFilename, commentMd);
+
+                const encodedCF = encodeURIComponent(commentFilename).replace(/\(/g, '%28').replace(/\)/g, '%29');
+                md += `\n\n---\n\n> [查看评论区](./${encodedCF})\n`;
+              }
+            }
+          } catch { /* 评论加载失败不影响文章导出 */ }
+        }
+
         articlesFolder.file(filename, md);
       }
 
@@ -695,6 +753,7 @@
       const articlesFolderHandle = await folderHandle.getDirectoryHandle('articles', { create: true });
       const wantImages = refs.optImg.checked;
       const wantFm = refs.optFm.checked;
+      const wantComment = refs.optComment.checked;
 
       let imagesFolderHandle = null;
       if (wantImages) {
@@ -760,6 +819,62 @@
           // 转换并写入 markdown
           let md = htmlToMarkdown(item.html || '', imageMapping);
           if (wantFm) md = buildFrontmatter(item) + md;
+
+          if (wantComment) {
+            showProgress(refs, num, totalItems, `正在加载评论 ${num}/${totalItems}...`);
+            try {
+              const contentId = extractContentId(item);
+              if (contentId) {
+                const comments = await api.fetchAllComments(item.type, contentId, null);
+                if (comments.length > 0) {
+                  let commentImageMapping = {};
+                  if (wantImages && imagesFolderHandle) {
+                    const commentPrefix = `${String(num).padStart(3, '0')}_comment_`;
+                    let commentImgIdx = 0;
+                    for (const c of comments) {
+                      for (const url of extractCommentImageUrls(c.content || '')) {
+                        commentImgIdx++;
+                        const imgResult = await downloadImage(url);
+                        if (imgResult) {
+                          const imgName = `${commentPrefix}${String(commentImgIdx).padStart(3, '0')}${imgResult.ext}`;
+                          commentImageMapping[url] = `images/${imgName}`;
+                          const fh = await imagesFolderHandle.getFileHandle(imgName, { create: true });
+                          const w = await fh.createWritable();
+                          await w.write(imgResult.buffer);
+                          await w.close();
+                        }
+                      }
+                      for (const child of (c.child_comments || [])) {
+                        for (const url of extractCommentImageUrls(child.content || '')) {
+                          commentImgIdx++;
+                          const imgResult = await downloadImage(url);
+                          if (imgResult) {
+                            const imgName = `${commentPrefix}${String(commentImgIdx).padStart(3, '0')}${imgResult.ext}`;
+                            commentImageMapping[url] = `images/${imgName}`;
+                            const fh = await imagesFolderHandle.getFileHandle(imgName, { create: true });
+                            const w = await fh.createWritable();
+                            await w.write(imgResult.buffer);
+                            await w.close();
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  const commentMd = buildCommentsMarkdown(
+                    comments,
+                    item.title || `${item.author}的${typeLabel}`,
+                    commentImageMapping
+                  );
+                  const commentFilename = `${baseName}-评论.md`;
+                  await writeTextFile(articlesFolderHandle, commentFilename, commentMd);
+
+                  const encodedCF = encodeURIComponent(commentFilename).replace(/\(/g, '%28').replace(/\)/g, '%29');
+                  md += `\n\n---\n\n> [查看评论区](./${encodedCF})\n`;
+                }
+              }
+            } catch { /* 评论加载失败不影响文章导出 */ }
+          }
 
           await writeTextFile(articlesFolderHandle, filename, md);
         }
@@ -855,6 +970,11 @@
       '---',
       '',
     ].join('\n');
+  }
+
+  function extractContentId(item) {
+    const pageInfo = api.detectPage(item.url);
+    return pageInfo ? pageInfo.id : '';
   }
 
   function sanitizeFilename(name) {
