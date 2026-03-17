@@ -259,6 +259,7 @@
     if (!apiType) return { comments: [], totals: 0 };
 
     const comments = [];
+    let totals = 0;
     let nextUrl = `https://www.zhihu.com/api/v4/comment_v5/${apiType}/${id}/root_comment?order_by=ts&limit=20&offset=`;
 
     while (nextUrl) {
@@ -270,11 +271,12 @@
 
       const data = await response.json();
       const paging = data.paging || {};
+      totals = paging.totals ?? totals;
       comments.push(...(data.data || []));
       nextUrl = paging.is_end ? null : (paging.next || null);
     }
 
-    return { comments, totals: comments.length };
+    return { comments, totals };
   }
 
   async function fetchChildComments(rootCommentId) {
@@ -302,12 +304,13 @@
 
     for (let i = 0; i < comments.length; i++) {
       const comment = comments[i];
-      if (onProgress) onProgress(i + 1, comments.length);
 
       if (comment.child_comment_count > 0 &&
           (comment.child_comments || []).length < comment.child_comment_count) {
         comment.child_comments = await fetchChildComments(comment.id);
       }
+
+      if (onProgress) onProgress(i + 1, comments.length);
     }
 
     return comments;
