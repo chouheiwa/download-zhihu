@@ -133,6 +133,16 @@
     .btn:active { background: #003d99; }
     .btn:disabled { background: #ccc; cursor: not-allowed; }
 
+    /* 导出模式选择 */
+    .export-mode-title { font-size: 12px; color: #888; margin-bottom: 4px; }
+    .export-mode label {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 0; cursor: pointer; font-size: 13px; color: #555;
+    }
+    .export-mode input[type="radio"] {
+      width: 16px; height: 16px; accent-color: #0066ff; cursor: pointer;
+    }
+
     /* 状态 */
     .status-msg { text-align: center; padding: 16px; color: #888; font-size: 13px; }
     .error-msg { color: #e74c3c; }
@@ -379,7 +389,7 @@
         zip.file(`${baseName}.md`, md);
         const imagesFolder = zip.folder('images');
         for (const f of imageFiles) {
-          imagesFolder.file(f.path.replace('images/', ''), f.buffer);
+          imagesFolder.file(f.path, f.buffer);
         }
         const blob = await zip.generateAsync(
           { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
@@ -440,6 +450,17 @@
           <input type="checkbox" id="col-opt-img" checked>
         </label>
       </div>
+      <div class="export-mode">
+        <div class="export-mode-title">导出方式</div>
+        <label class="option-item">
+          <span>导出到文件夹（推荐，省内存）</span>
+          <input type="radio" name="col-export-mode" value="folder" checked>
+        </label>
+        <label class="option-item">
+          <span>导出为 ZIP</span>
+          <input type="radio" name="col-export-mode" value="zip">
+        </label>
+      </div>
       <div id="col-progress-wrap" class="progress-area hidden">
         <div class="progress-track"><div id="col-progress-bar" class="progress-fill"></div></div>
         <div id="col-progress-label" class="progress-text"></div>
@@ -457,6 +478,8 @@
       progressLabel: body.querySelector('#col-progress-label'),
     };
 
+    const getExportMode = () => body.querySelector('input[name="col-export-mode"]:checked').value;
+
     // 通过 API 获取真实数量
     api.fetchCollectionPage(info.apiUrl).then((result) => {
       info.itemCount = result.totals;
@@ -466,7 +489,13 @@
       countEl.textContent = '获取失败';
     });
 
-    refs.btn.addEventListener('click', () => handleCollectionExport(info, refs));
+    refs.btn.addEventListener('click', () => {
+      if (getExportMode() === 'folder') {
+        handleCollectionExportToFolder(info, refs);
+      } else {
+        handleCollectionExport(info, refs);
+      }
+    });
   }
 
   async function handleCollectionExport(info, refs) {
@@ -495,8 +524,9 @@
       const wantFm = refs.optFm.checked;
       const collectionName = sanitizeFilename(info.title);
       const zip = new JSZip();
-      const folder = zip.folder(collectionName);
-      const imagesFolder = wantImages ? zip.folder(`${collectionName}/images`) : null;
+      const rootFolder = zip.folder(collectionName);
+      const articlesFolder = rootFolder.folder('articles');
+      const imagesFolder = wantImages ? articlesFolder.folder('images') : null;
       const usedNames = new Set();
       const tocEntries = []; // 目录条目 { num, title, author, type, filename }
 
@@ -537,18 +567,18 @@
             const result = await batchDownloadImages(itemImgUrls, prefix, null);
             imageMapping = result.imageMapping;
             for (const f of result.imageFiles) {
-              imagesFolder.file(f.path.replace('images/', ''), f.buffer);
+              imagesFolder.file(f.path, f.buffer);
             }
           }
         }
 
         let md = htmlToMarkdown(item.html || '', imageMapping);
         if (wantFm) md = buildFrontmatter(item) + md;
-        folder.file(filename, md);
+        articlesFolder.file(filename, md);
       }
 
       // 生成目录文件
-      folder.file('README.md', buildTocMarkdown(collectionName, tocEntries));
+      rootFolder.file('README.md', buildTocMarkdown(collectionName, tocEntries));
 
       // 阶段 3：打包
       refs.btn.textContent = '正在打包...';
@@ -571,6 +601,162 @@
       refs.btn.textContent = `失败: ${err.message}`;
       refs.btn.disabled = false;
     }
+  }
+
+  // ============================
+  // 收藏夹导出到文件夹（流式，低内存）
+  // ============================
+
+  async function handleCollectionExportToFolder(info, refs) {
+    refs.btn.disabled = true;
+
+    try {
+      // 让用户选择目标文件夹
+      let rootHandle;
+      try {
+        rootHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      } catch {
+        // 用户取消了选择
+        refs.btn.disabled = false;
+        return;
+      }
+
+      const collectionName = sanitizeFilename(info.title);
+      const folderHandle = await rootHandle.getDirectoryHandle(collectionName, { create: true });
+      const articlesFolderHandle = await folderHandle.getDirectoryHandle('articles', { create: true });
+      const wantImages = refs.optImg.checked;
+      const wantFm = refs.optFm.checked;
+
+      let imagesFolderHandle = null;
+      if (wantImages) {
+        imagesFolderHandle = await articlesFolderHandle.getDirectoryHandle('images', { create: true });
+      }
+
+      const usedNames = new Set();
+      const tocEntries = [];
+      let nextUrl = info.apiUrl;
+      let pageNum = 0;
+      let itemIndex = 0;
+      let totalItems = info.itemCount || 0;
+
+      // 边加载边处理，不积累所有数据
+      while (nextUrl) {
+        pageNum++;
+        showProgress(refs, itemIndex, totalItems || 1, `正在加载第 ${pageNum} 页...`);
+
+        const result = await api.fetchCollectionPage(nextUrl);
+        if (totalItems === 0) totalItems = result.totals;
+        nextUrl = result.nextUrl;
+
+        // 逐条处理当前页的数据，处理完立即释放
+        for (const item of result.items) {
+          itemIndex++;
+          const num = itemIndex;
+          const typeLabel = TYPE_LABELS[item.type] || item.type;
+
+          showProgress(refs, num, totalItems, `正在处理 ${num}/${totalItems}: ${(item.title || '').slice(0, 15)}...`);
+          refs.btn.textContent = `正在处理 ${num}/${totalItems}...`;
+
+          let baseName = sanitizeFilename(
+            item.title
+              ? `${item.title}-${item.author}的${typeLabel}`
+              : `${item.author}的${typeLabel}_${num}`
+          );
+          if (usedNames.has(baseName)) baseName = `${baseName}_${num}`;
+          usedNames.add(baseName);
+
+          const filename = `${baseName}.md`;
+
+          tocEntries.push({
+            num,
+            title: item.title || `${item.author}的${typeLabel}`,
+            author: item.author,
+            type: item.type,
+            filename,
+            url: item.url,
+          });
+
+          // 下载图片并直接写入文件夹
+          let imageMapping = {};
+
+          if (wantImages && item.html) {
+            const itemImgUrls = extractImageUrls(item.html);
+            if (itemImgUrls.length > 0) {
+              const prefix = `${String(num).padStart(3, '0')}_`;
+              const result = await batchDownloadImagestoFolder(itemImgUrls, prefix, imagesFolderHandle);
+              imageMapping = result.imageMapping;
+            }
+          }
+
+          // 转换并写入 markdown
+          let md = htmlToMarkdown(item.html || '', imageMapping);
+          if (wantFm) md = buildFrontmatter(item) + md;
+
+          await writeTextFile(articlesFolderHandle, filename, md);
+        }
+        // result.items 在这里离开作用域，可被 GC 回收
+      }
+
+      if (itemIndex === 0) throw new Error('收藏夹为空');
+
+      // 写入目录文件
+      showProgress(refs, totalItems, totalItems, '正在生成目录...');
+      await writeTextFile(folderHandle, 'README.md', buildTocMarkdown(collectionName, tocEntries));
+
+      refs.btn.textContent = `导出成功 ✓（${itemIndex} 篇）`;
+      setTimeout(() => {
+        refs.btn.textContent = '导出整个收藏夹';
+        refs.btn.disabled = false;
+        hideProgress(refs);
+      }, 3000);
+    } catch (err) {
+      refs.btn.textContent = `失败: ${err.message}`;
+      refs.btn.disabled = false;
+    }
+  }
+
+  /**
+   * 下载图片并直接写入文件夹，不在内存中积累 buffer
+   */
+  async function batchDownloadImagestoFolder(urls, prefix, imagesFolderHandle) {
+    const imageMapping = {};
+    let completed = 0;
+    const concurrency = 5;
+    let index = 0;
+
+    async function worker() {
+      while (index < urls.length) {
+        const i = index++;
+        const url = urls[i];
+        const result = await downloadImage(url);
+        completed++;
+        if (result) {
+          const filename = `${prefix}${String(i + 1).padStart(3, '0')}${result.ext}`;
+          imageMapping[url] = `images/${filename}`;
+          // 直接写入文件系统，写完 buffer 即可被 GC
+          const fileHandle = await imagesFolderHandle.getFileHandle(filename, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(result.buffer);
+          await writable.close();
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, urls.length) }, () => worker())
+    );
+
+    return { imageMapping };
+  }
+
+  /**
+   * 向文件夹中写入文本文件
+   */
+  async function writeTextFile(folderHandle, filename, text) {
+    const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(text);
+    await writable.close();
   }
 
   // ============================
@@ -605,7 +791,7 @@
   function sanitizeFilename(name) {
     return name
       .replace(/<[^>]*>/g, '')
-      .replace(/[\\/:*?"<>|#^\[\]]/g, '')
+      .replace(/[\\/:*?"<>|#^\[\]()（）]/g, '')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 100);
@@ -624,8 +810,9 @@
 
     for (const e of entries) {
       const typeLabel = TYPE_LABELS[e.type] || e.type;
-      const encodedFilename = encodeURIComponent(e.filename);
-      lines.push(`${e.num}. [${e.title}](./${encodedFilename}) - ${e.author}（${typeLabel}）`);
+      const encodedFilename = encodeURIComponent(e.filename).replace(/\(/g, '%28').replace(/\)/g, '%29');
+      const escapedTitle = e.title.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+      lines.push(`${e.num}. [${escapedTitle}](./articles/${encodedFilename}) - ${e.author}（${typeLabel}）`);
     }
 
     lines.push('');
@@ -663,7 +850,7 @@
     }
   }
 
-  async function batchDownloadImages(urls, prefix, onProgress) {
+  async function batchDownloadImages(urls, prefix, onProgress, imagePathPrefix = 'images/') {
     const imageMapping = {};
     const imageFiles = [];
     let completed = 0;
@@ -679,9 +866,8 @@
         if (onProgress) onProgress(completed, urls.length);
         if (result) {
           const filename = `${prefix}${String(i + 1).padStart(3, '0')}${result.ext}`;
-          const localPath = `images/${filename}`;
-          imageMapping[url] = localPath;
-          imageFiles.push({ path: localPath, buffer: result.buffer });
+          imageMapping[url] = `${imagePathPrefix}${filename}`;
+          imageFiles.push({ path: filename, buffer: result.buffer });
         }
       }
     }
