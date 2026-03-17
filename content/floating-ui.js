@@ -335,6 +335,10 @@
           <span>下载图片到本地</span>
           <input type="checkbox" id="opt-img" ${imgUrls.length > 0 ? 'checked' : ''}>
         </label>
+        <label class="option-item">
+          <span>导出评论区</span>
+          <input type="checkbox" id="opt-comment">
+        </label>
       </div>
       <div id="progress-wrap" class="progress-area hidden">
         <div class="progress-track"><div id="progress-bar" class="progress-fill"></div></div>
@@ -347,49 +351,117 @@
       btn: body.querySelector('#btn-dl'),
       optFm: body.querySelector('#opt-fm'),
       optImg: body.querySelector('#opt-img'),
+      optComment: body.querySelector('#opt-comment'),
       progressWrap: body.querySelector('#progress-wrap'),
       progressBar: body.querySelector('#progress-bar'),
       progressLabel: body.querySelector('#progress-label'),
     };
 
     // 切换按钮文字
-    refs.optImg.addEventListener('change', () => {
-      if (refs.optImg.checked && imgUrls.length > 0) {
+    function updateBtnText() {
+      const wantImg = refs.optImg.checked && imgUrls.length > 0;
+      const wantComment = refs.optComment.checked;
+      if (wantImg && wantComment) {
+        refs.btn.textContent = '下载 ZIP（含图片和评论）';
+      } else if (wantImg) {
         refs.btn.textContent = `下载 ZIP（含 ${imgUrls.length} 张图片）`;
+      } else if (wantComment) {
+        refs.btn.textContent = '下载 ZIP（含评论）';
       } else {
         refs.btn.textContent = '下载 Markdown';
       }
-    });
+    }
+    refs.optImg.addEventListener('change', updateBtnText);
+    refs.optComment.addEventListener('change', updateBtnText);
 
-    refs.btn.addEventListener('click', () => handleArticleDownload(data, imgUrls, refs));
+    refs.btn.addEventListener('click', () => handleArticleDownload(data, imgUrls, refs, updateBtnText));
   }
 
-  async function handleArticleDownload(data, imgUrls, refs) {
+  async function handleArticleDownload(data, imgUrls, refs, updateBtnText) {
     refs.btn.disabled = true;
 
     const wantImages = refs.optImg.checked && imgUrls.length > 0;
     const wantFm = refs.optFm.checked;
+    const wantComment = refs.optComment.checked;
     const baseName = sanitizeFilename(
       `${data.title}-${data.author}的${TYPE_LABELS[data.type] || data.type}`
     );
+    const commentFileName = `${baseName}-评论.md`;
+    const needZip = wantImages || wantComment;
 
     try {
+      let imageMapping = {};
+      let imageFiles = [];
+
       if (wantImages) {
         refs.btn.textContent = '正在下载图片...';
-        const { imageMapping, imageFiles } = await batchDownloadImages(imgUrls, '', (done, total) => {
+        const result = await batchDownloadImages(imgUrls, '', (done, total) => {
           showProgress(refs, done, total, `正在下载图片 ${done}/${total}`);
         });
+        imageMapping = result.imageMapping;
+        imageFiles = result.imageFiles;
+      }
 
-        showProgress(refs, 1, 1, '正在生成 Markdown...');
-        let md = htmlToMarkdown(data.html, imageMapping);
-        if (wantFm) md = buildFrontmatter(data) + md;
+      showProgress(refs, 1, 1, '正在生成 Markdown...');
+      let md = htmlToMarkdown(data.html, imageMapping);
+      if (wantFm) md = buildFrontmatter(data) + md;
 
+      // 评论
+      let commentMd = '';
+      let commentImageFiles = [];
+
+      if (wantComment) {
+        refs.btn.textContent = '正在加载评论...';
+        const pageInfo = api.detectPage(window.location.href);
+        const comments = await api.fetchAllComments(pageInfo.type, pageInfo.id, (done, total) => {
+          showProgress(refs, done, total, `正在加载子评论 ${done}/${total}...`);
+        });
+
+        // 评论图片
+        let commentImageMapping = {};
+        if (wantImages && comments.length > 0) {
+          let commentIdx = 0;
+          const allCommentEntries = [];
+          for (const c of comments) {
+            commentIdx++;
+            const urls = extractCommentImageUrls(c.content || '');
+            if (urls.length > 0) allCommentEntries.push({ commentIdx, urls });
+            for (const child of (c.child_comments || [])) {
+              commentIdx++;
+              const childUrls = extractCommentImageUrls(child.content || '');
+              if (childUrls.length > 0) allCommentEntries.push({ commentIdx, urls: childUrls });
+            }
+          }
+          for (const entry of allCommentEntries) {
+            for (let i = 0; i < entry.urls.length; i++) {
+              const url = entry.urls[i];
+              const result = await downloadImage(url);
+              if (result) {
+                const filename = `comment_${String(entry.commentIdx).padStart(3, '0')}_${String(i + 1).padStart(3, '0')}${result.ext}`;
+                commentImageMapping[url] = `images/${filename}`;
+                commentImageFiles.push({ path: filename, buffer: result.buffer });
+              }
+            }
+          }
+        }
+
+        showProgress(refs, 1, 1, '正在生成评论 Markdown...');
+        commentMd = buildCommentsMarkdown(comments, data.title, commentImageMapping);
+
+        // 文章末尾追加评论引用
+        const encodedCommentFile = encodeURIComponent(commentFileName).replace(/\(/g, '%28').replace(/\)/g, '%29');
+        md += `\n\n---\n\n> [查看评论区](./${encodedCommentFile})\n`;
+      }
+
+      if (needZip) {
         showProgress(refs, 1, 1, '正在打包 ZIP...');
         const zip = new JSZip();
         zip.file(`${baseName}.md`, md);
-        const imagesFolder = zip.folder('images');
-        for (const f of imageFiles) {
-          imagesFolder.file(f.path, f.buffer);
+        if (wantComment) zip.file(commentFileName, commentMd);
+        if (wantImages || commentImageFiles.length > 0) {
+          const imagesFolder = zip.folder('images');
+          for (const f of imageFiles) imagesFolder.file(f.path, f.buffer);
+          for (const f of commentImageFiles) imagesFolder.file(f.path, f.buffer);
         }
         const blob = await zip.generateAsync(
           { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
@@ -397,9 +469,6 @@
         );
         triggerDownload(blob, `${baseName}.zip`);
       } else {
-        refs.btn.textContent = '正在转换...';
-        let md = htmlToMarkdown(data.html);
-        if (wantFm) md = buildFrontmatter(data) + md;
         const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
         triggerDownload(blob, `${baseName}.md`);
       }
@@ -407,7 +476,7 @@
       refs.btn.textContent = '下载成功 ✓';
       setTimeout(() => {
         refs.btn.disabled = false;
-        refs.btn.textContent = wantImages ? `下载 ZIP（含 ${imgUrls.length} 张图片）` : '下载 Markdown';
+        updateBtnText();
         hideProgress(refs);
       }, 2000);
     } catch (err) {
