@@ -245,6 +245,75 @@
   }
 
   // ============================
+  // 评论 API
+  // ============================
+
+  const COMMENT_TYPE_MAP = {
+    article: 'articles',
+    answer: 'answers',
+    pin: 'pins',
+  };
+
+  async function fetchRootComments(type, id) {
+    const apiType = COMMENT_TYPE_MAP[type];
+    if (!apiType) return { comments: [], totals: 0 };
+
+    const comments = [];
+    let nextUrl = `https://www.zhihu.com/api/v4/comment_v5/${apiType}/${id}/root_comment?order_by=ts&limit=20&offset=`;
+
+    while (nextUrl) {
+      const response = await fetch(nextUrl, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`评论 API 请求失败: ${response.status}`);
+
+      const data = await response.json();
+      const paging = data.paging || {};
+      comments.push(...(data.data || []));
+      nextUrl = paging.is_end ? null : (paging.next || null);
+    }
+
+    return { comments, totals: comments.length };
+  }
+
+  async function fetchChildComments(rootCommentId) {
+    const children = [];
+    let nextUrl = `https://www.zhihu.com/api/v4/comment_v5/comment/${rootCommentId}/anchor_comment?order_by=score&limit=20&offset=`;
+
+    while (nextUrl) {
+      const response = await fetch(nextUrl, {
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) break;
+
+      const data = await response.json();
+      const paging = data.paging || {};
+      children.push(...(data.data || []));
+      nextUrl = paging.is_end ? null : (paging.next || null);
+    }
+
+    return children;
+  }
+
+  async function fetchAllComments(type, id, onProgress) {
+    const { comments } = await fetchRootComments(type, id);
+
+    for (let i = 0; i < comments.length; i++) {
+      const comment = comments[i];
+      if (onProgress) onProgress(i + 1, comments.length);
+
+      if (comment.child_comment_count > 0 &&
+          (comment.child_comments || []).length < comment.child_comment_count) {
+        comment.child_comments = await fetchChildComments(comment.id);
+      }
+    }
+
+    return comments;
+  }
+
+  // ============================
   // 导出到 window
   // ============================
 
@@ -253,5 +322,6 @@
     extractContent,
     getCollectionInfo,
     fetchCollectionPage,
+    fetchAllComments,
   };
 })();
