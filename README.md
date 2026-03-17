@@ -1,13 +1,15 @@
 # 知乎文章下载器
 
-一键将知乎内容导出为 Markdown 文件的 Chrome 扩展。支持文章、回答、问题、想法、收藏夹五种内容类型，自动下载图片并打包为 ZIP。
+一键将知乎内容导出为 Markdown 文件的 Chrome 扩展。支持文章、回答、问题、想法、收藏夹五种内容类型，自动下载图片、导出评论区，并打包为 ZIP。
 
 ## 功能特性
 
 - **多类型支持** — 文章、回答、问题、想法、收藏夹一键导出
-- **收藏夹批量导出** — 自动分页获取全部内容，生成目录索引（README.md）
+- **评论区导出** — 完整获取评论和子评论（楼中楼），生成独立评论 Markdown 文件
+- **收藏夹批量导出** — 自动分页获取全部内容，支持 ZIP 和文件夹两种导出方式
+- **文件夹导出模式** — 使用 File System Access API 逐条写入，大收藏夹不会爆内存
 - **高质量转换** — 完整保留数学公式、代码块、表格、脚注、链接卡片
-- **图片本地化** — 自动下载文章图片，与 Markdown 一起打包为 ZIP
+- **图片本地化** — 自动下载文章和评论中的图片，与 Markdown 一起打包
 - **Front Matter** — 可选生成 YAML 元数据（标题、作者、来源、日期）
 - **浮动按钮** — 知乎页面内直接显示可拖拽按钮，无需打开弹窗
 - **零配置** — 无需登录、无需 API Key，打开知乎页面直接使用
@@ -15,17 +17,20 @@
 
 ## 安装方式
 
-### 从 Chrome Web Store 安装
+### 从 GitHub Release 下载
 
-> 即将上架，敬请期待
+1. 前往 [Releases](../../releases) 页面下载最新版 ZIP 包
+2. 解压到一个固定位置（不要删除解压后的文件夹）
+3. 打开 Chrome，访问 `chrome://extensions/`
+4. 右上角开启 **开发者模式**
+5. 点击 **加载已解压的扩展程序**，选择解压后的文件夹
 
-### 开发者模式安装
+### 从源码安装
 
-1. 下载或克隆本仓库
+1. 克隆本仓库
 2. 打开 Chrome，访问 `chrome://extensions/`
 3. 开启右上角 **开发者模式**
 4. 点击 **加载已解压的扩展程序**，选择项目根目录
-5. 完成
 
 ## 使用方法
 
@@ -35,52 +40,56 @@
 4. 根据需要调整选项：
    - **包含 Front Matter** — 在 Markdown 开头添加 YAML 元数据
    - **下载图片到本地** — 将图片下载并打包
+   - **导出评论区** — 获取完整评论（含子评论）生成独立文件
 5. 点击下载按钮
 
-### 单篇下载规则
+### 单篇下载
 
 | 条件 | 输出格式 |
 |------|---------|
-| 无图片 / 未勾选下载图片 | `.md` 文件（图片保留远程链接） |
-| 有图片 + 勾选下载图片 | `.zip` 压缩包 |
+| 无图片、无评论 | `.md` 文件 |
+| 有图片或有评论 | `.zip` 压缩包 |
 
 ZIP 包结构：
 
 ```
 标题-作者的文章.zip
 ├── 标题-作者的文章.md
+├── 标题-作者的文章-评论.md    # 勾选评论时生成
 └── images/
-    ├── image_001.jpg
-    ├── image_002.png
-    └── ...
+    ├── 001.jpg
+    └── comment_001_001.jpg    # 评论中的图片
 ```
 
 ### 收藏夹批量导出
 
-收藏夹导出为 ZIP，包含所有文章的 Markdown 文件和一个目录索引：
+支持两种导出方式：
+
+- **导出到文件夹**（推荐）— 使用 File System Access API 逐条写入，内存占用极低
+- **导出为 ZIP** — 传统方式，全部打包后下载
 
 ```
-收藏夹名称.zip
-├── README.md              # 目录索引，可点击跳转
-├── 001_标题-作者.md
-├── 002_标题-作者.md
-├── ...
-└── images/                # 所有图片（按文章编号前缀区分）
-    ├── 001_001.jpg
-    ├── 001_002.png
-    ├── 002_001.jpg
-    └── ...
+收藏夹名称/
+├── README.md                     # 目录索引，可点击跳转
+└── articles/
+    ├── 文章1.md
+    ├── 文章1-评论.md              # 勾选评论时生成
+    ├── 文章2.md
+    ├── 文章2-评论.md
+    └── images/
+        ├── 001_001.jpg           # 文章图片
+        └── 001_comment_001_001.jpg  # 评论图片
 ```
 
 ## 支持的内容类型
 
-| 类型 | URL 格式 | 示例 |
-|------|---------|------|
-| 文章 | `zhuanlan.zhihu.com/p/{id}` | 知乎专栏文章 |
-| 回答 | `zhihu.com/question/{qid}/answer/{aid}` | 问题下的回答 |
-| 问题 | `zhihu.com/question/{qid}` | 问题详情及回答 |
-| 想法 | `zhihu.com/pin/{id}` | 知乎想法/动态 |
-| 收藏夹 | `zhihu.com/collection/{id}` | 收藏夹全部内容 |
+| 类型 | URL 格式 | 评论导出 |
+|------|---------|---------|
+| 文章 | `zhuanlan.zhihu.com/p/{id}` | 支持 |
+| 回答 | `zhihu.com/question/{qid}/answer/{aid}` | 支持 |
+| 问题 | `zhihu.com/question/{qid}` | 不支持 |
+| 想法 | `zhihu.com/pin/{id}` | 支持 |
+| 收藏夹 | `zhihu.com/collection/{id}` | 支持（逐篇） |
 
 ## Markdown 转换规则
 
@@ -96,15 +105,18 @@ ZIP 包结构：
 
 ```
 DownloadZhihu/
-├── manifest.json              # Chrome 扩展配置 (Manifest V3)
+├── manifest.json                 # Chrome 扩展配置 (Manifest V3)
 ├── content/
-│   ├── detector.js            # 数据层：页面检测 + 内容提取 + 收藏夹 API
-│   └── floating-ui.js         # UI 层：浮动按钮 + 面板（Shadow DOM）
+│   ├── detector.js               # 数据层：页面检测 + 内容提取 + 评论 API
+│   ├── export-utils.js           # 共享工具：进度条、文件名、图片下载
+│   ├── article-panel.js          # 单篇面板 UI + 下载逻辑
+│   ├── collection-panel.js       # 收藏夹面板 + ZIP/文件夹导出
+│   └── floating-ui.js            # 主入口：浮动按钮 + 面板调度（Shadow DOM）
 ├── lib/
-│   ├── turndown.js            # HTML → Markdown 转换库
-│   ├── jszip.min.js           # ZIP 打包库
-│   └── html-to-markdown.js    # 知乎专用转换规则
-└── icons/                     # 扩展图标
+│   ├── turndown.js               # HTML → Markdown 转换库
+│   ├── jszip.min.js              # ZIP 打包库
+│   └── html-to-markdown.js       # 知乎专用转换规则 + 评论格式化
+└── icons/                        # 扩展图标
 ```
 
 ## 权限说明
