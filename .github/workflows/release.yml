@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify manifest version matches tag
+        run: |
+          MANIFEST_VERSION=$(grep -o '"version": "[^"]*"' manifest.json | grep -o '[0-9][^"]*')
+          TAG_VERSION=${{ steps.version.outputs.VERSION }}
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::manifest.json version ($MANIFEST_VERSION) does not match tag (v$TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Build ZIP
+        run: |
+          ZIP_NAME="DownloadZhihu-v${{ steps.version.outputs.VERSION }}.zip"
+          zip -r "$ZIP_NAME" \
+            manifest.json \
+            content/ \
+            lib/ \
+            icons/
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 安装方法
+
+            1. 下载下方的 `DownloadZhihu-v${{ steps.version.outputs.VERSION }}.zip` 文件
+            2. 解压到一个固定位置（不要删除解压后的文件夹）
+            3. 打开 Chrome，访问 `chrome://extensions/`
+            4. 右上角开启「开发者模式」
+            5. 点击「加载已解压的扩展程序」，选择解压后的文件夹
+            6. 访问知乎任意文章/回答/收藏夹页面，右下角会出现蓝色浮动按钮
+          files: ${{ env.ZIP_NAME }}
