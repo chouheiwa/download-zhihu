@@ -14,6 +14,7 @@
 
 - 端点: `GET /api/v4/comment_v5/{type}/{id}/root_comment?order_by=ts&limit=20&offset=`
 - type 映射: `article` → `articles`, `answer` → `answers`, `pin` → `pins`
+- 若 `type` 不在映射表中，直接返回 `{ comments: [], totals: 0 }`，跳过 API 请求
 - 自动翻页: 使用 `paging.next`，直到 `paging.is_end === true`
 - 返回: `{ comments: Comment[], totals: number }`
 
@@ -22,7 +23,7 @@
 获取某条根评论下的所有子评论。
 
 - 首页: `GET /api/v4/comment_v5/comment/{rootCommentId}/anchor_comment?order_by=score&limit=20&offset=`
-- 翻页: 使用 `paging.next` 返回的 `anchor_more_comment` URL
+- 翻页: 读取响应中 `paging.next` 字段作为下一页 URL（指向 `anchor_more_comment` 端点）；`paging.is_end === true` 时停止翻页
 - 返回: `Comment[]`
 
 ### fetchAllComments(type, id, onProgress)
@@ -30,7 +31,7 @@
 组合函数，获取完整评论树。
 
 1. 调用 `fetchRootComments` 获取所有一级评论
-2. 对 `child_comment_count > 0` 且 `child_comments` 数组不完整的根评论，调用 `fetchChildComments` 补全
+2. 对每条根评论，当 `child_comments.length < child_comment_count` 时视为子评论不完整，调用 `fetchChildComments(rootComment.id)` 补全
 3. `onProgress` 回调用于进度提示
 4. 返回: `Comment[]`（每条根评论的 `child_comments` 已完整填充）
 
@@ -49,7 +50,21 @@
 
 ## Markdown 格式化
 
-新增 `buildCommentsMarkdown(comments, title, imageMapping)` 函数。
+在 `lib/html-to-markdown.js` 中新增以下函数，通过 `window` 暴露给 `floating-ui.js`。
+
+### commentHtmlToText(html)
+
+将评论 HTML 转为纯文本。处理 `<p>`, `<br>`, 表情文字 `[xxx]`，以及 `<a class="comment_img">` 标签。
+
+### extractCommentImageUrls(html)
+
+从评论 HTML 中提取 `<a class="comment_img">` 的 href 作为图片 URL 列表。
+
+### buildCommentsMarkdown(comments, title, imageMapping)
+
+将评论树转为 Markdown 字符串。放在 `lib/html-to-markdown.js` 中，与 `commentHtmlToText` 和 `extractCommentImageUrls` 同文件，便于直接调用。
+
+三个新函数均在文件末尾通过 `window.xxx = xxx` 注册，与现有的 `window.htmlToMarkdown` / `window.extractImageUrls` 模式一致。
 
 ### 输出格式
 
@@ -87,6 +102,15 @@
 - 勾选「下载图片」时: 下载图片到 `images/` 目录，markdown 中引用为 `![评论图片](images/xxx.jpg)`
 - 未勾选时: 保留原始 URL 作为链接 `[查看图片](URL)`
 
+### 评论图片命名规则
+
+评论图片与文章图片共享 `images/` 目录。为避免冲突，使用以下命名规则:
+
+- 文章图片: `{articlePrefix}_{imageIndex}{ext}`（现有逻辑不变）
+- 评论图片: `{articlePrefix}_comment_{commentIndex}_{imageIndex}{ext}`
+
+其中 `articlePrefix` 为文章在收藏夹中的序号（如 `001`），单篇导出时为空前缀。
+
 ## UI 集成
 
 ### 单篇面板
@@ -94,6 +118,17 @@
 - 在「下载图片到本地」checkbox 下方新增「导出评论区」checkbox（默认不勾选）
 - 勾选后导出自动升级为 ZIP（即使未勾选图片）
 - ZIP 内容: `{标题}.md` + `{标题}-评论.md`（+ `images/` 如有图片）
+
+### 按钮文字逻辑
+
+根据 checkbox 组合更新按钮文字:
+
+| 图片 | 评论 | 按钮文字 |
+|------|------|---------|
+| 否 | 否 | 下载 Markdown |
+| 是 | 否 | 下载 ZIP（含 N 张图片） |
+| 否 | 是 | 下载 ZIP（含评论） |
+| 是 | 是 | 下载 ZIP（含图片和评论） |
 
 ### 收藏夹面板
 
@@ -140,7 +175,7 @@ images/
 - answer（回答）: 支持
 - pin（想法）: 支持
 - question（问题页）: 不支持（问题页导出多个回答，评论归属不明确）
-- collection（收藏夹）: 支持（逐篇处理）
+- collection（收藏夹）: 支持（逐篇处理，每篇文章的 type 若不在映射表中则跳过评论）
 
 ### 进度提示
 
@@ -153,5 +188,5 @@ images/
 | 文件 | 改动 |
 |------|------|
 | `content/detector.js` | 新增 `fetchRootComments`, `fetchChildComments`, `fetchAllComments`，暴露到 API 对象 |
-| `content/floating-ui.js` | 新增评论 checkbox UI、`buildCommentsMarkdown` 函数、修改 `handleArticleDownload` 和 `handleCollectionExport`/`handleCollectionExportToFolder` 集成评论导出 |
-| `lib/html-to-markdown.js` | 新增 `extractCommentImageUrls(html)` 提取评论图片，新增 `commentHtmlToText(html)` 评论 HTML 转纯文本 |
+| `content/floating-ui.js` | 新增评论 checkbox UI、修改按钮文字逻辑、修改 `handleArticleDownload` 和 `handleCollectionExport`/`handleCollectionExportToFolder` 集成评论导出 |
+| `lib/html-to-markdown.js` | 新增 `extractCommentImageUrls(html)`、`commentHtmlToText(html)`、`buildCommentsMarkdown(comments, title, imageMapping)`，均通过 `window.xxx` 注册 |
