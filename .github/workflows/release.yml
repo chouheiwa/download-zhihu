@@ -33,9 +33,12 @@ jobs:
           ZIP_NAME="DownloadZhihu-v${{ steps.version.outputs.VERSION }}.zip"
           zip -r "$ZIP_NAME" \
             manifest.json \
+            background.js \
             content/ \
+            export/ \
             lib/ \
-            icons/
+            icons/ \
+            -x "*.DS_Store"
           echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
@@ -50,5 +53,22 @@ jobs:
             3. 打开 Chrome，访问 `chrome://extensions/`
             4. 右上角开启「开发者模式」
             5. 点击「加载已解压的扩展程序」，选择解压后的文件夹
-            6. 访问知乎任意文章/回答/收藏夹页面，右下角会出现蓝色浮动按钮
+            6. 访问知乎任意文章/回答/收藏夹/专栏页面，右下角会出现蓝色浮动按钮
           files: ${{ env.ZIP_NAME }}
+
+      # Chrome Web Store 自动发布
+      # 需要在仓库 Settings → Secrets 中配置：
+      #   CHROME_EXTENSION_ID    — 扩展 ID（从 Chrome Web Store 开发者后台获取）
+      #   CHROME_CLIENT_ID       — Google Cloud OAuth 2.0 客户端 ID
+      #   CHROME_CLIENT_SECRET   — OAuth 2.0 客户端密钥
+      #   CHROME_REFRESH_TOKEN   — OAuth 2.0 刷新令牌
+      - name: Publish to Chrome Web Store
+        if: vars.CHROME_STORE_ENABLED == 'true'
+        uses: mnao305/chrome-extension-upload@v5.0.0
+        with:
+          file-path: ${{ env.ZIP_NAME }}
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          publish: true
