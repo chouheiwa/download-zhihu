@@ -253,17 +253,11 @@
       els.folderPath.textContent = dirHandle.name;
       log(`已选择文件夹：${dirHandle.name}`);
 
-      progressData = await progress.readProgress(dirHandle);
+      progressData = await progress.readProgress(dirHandle, collectionId);
 
       if (progressData) {
-        // 验证进度文件属于当前收藏夹
-        if (progressData.collectionId && progressData.collectionId !== collectionId) {
-          log(`进度文件属于其他收藏夹（${progressData.collectionName || progressData.collectionId}），将创建新的进度`, 'warn');
-          progressData = progress.createInitialProgress(collectionId, collectionName);
-        } else {
-          if (progressData.articles.batchSize) {
-            els.articleBatchSize.value = progressData.articles.batchSize;
-          }
+        if (progressData.articles.batchSize) {
+          els.articleBatchSize.value = progressData.articles.batchSize;
         }
       } else {
         progressData = progress.createInitialProgress(collectionId, collectionName);
@@ -356,7 +350,7 @@
       }
 
       if (changed) {
-        await progress.writeProgress(dirHandle, progressData);
+        await progress.writeProgress(dirHandle, collectionId, progressData);
       }
     } catch {
       // 文件夹不存在说明还没开始导出，不需要校准
@@ -651,7 +645,7 @@
         await u.writeTextFile(articlesFolder, filename, md);
 
         // 逐篇更新进度（中途中断也不丢）
-        await progress.addExportedArticle(dirHandle, progressData, item.id);
+        await progress.addExportedArticle(dirHandle, collectionId, progressData, item.id);
 
         tocEntries.push({
           num,
@@ -795,7 +789,7 @@
             log(`${displayTitle}：无评论`);
           }
 
-          await progress.updateCommentProgress(dirHandle, progressData, item.id);
+          await progress.updateCommentProgress(dirHandle, collectionId, progressData, item.id);
         } catch (err) {
           log(`${displayTitle} 评论导出失败: ${err.message}`, 'error');
         }
