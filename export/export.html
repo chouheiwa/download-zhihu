@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>知乎收藏夹导出管理器</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="export.css">
+</head>
+<body>
+  <!-- 水墨装饰 -->
+  <div class="ink-wash ink-wash-1"></div>
+  <div class="ink-wash ink-wash-2"></div>
+  <div class="rice-paper-texture"></div>
+
+  <main class="app">
+    <!-- 头部 -->
+    <header class="app-header">
+      <div class="seal-mark" aria-hidden="true">藏</div>
+      <div class="header-center">
+        <h1 class="app-title">收藏夹导出</h1>
+        <p id="collection-name" class="app-subtitle">加载中...</p>
+      </div>
+      <button id="btn-refresh-dir" class="btn btn-ink btn-small" title="重新从 API 加载并更新缓存（检查新增内容）">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        刷新缓存
+      </button>
+      <div class="header-status">
+        <span class="status-dot"></span>
+        <span>就绪</span>
+      </div>
+    </header>
+
+    <div class="divider-ink"><span class="divider-ornament">&#x2022; &#x2022; &#x2022;</span></div>
+
+    <!-- 主内容 -->
+    <div class="app-body">
+      <!-- 文件夹选择 -->
+      <section class="card card-folder">
+        <h2 class="card-title">
+          <span class="title-decoration">一</span>
+          选择目录
+        </h2>
+        <div class="folder-row">
+          <div class="folder-display">
+            <span id="folder-path" class="folder-path">未选择文件夹</span>
+          </div>
+          <button id="btn-select-folder" class="btn btn-ink">选择文件夹</button>
+        </div>
+      </section>
+
+      <!-- 两栏导出区 -->
+      <div class="export-grid">
+        <!-- 文章导出 -->
+        <section class="card card-export">
+          <h2 class="card-title">
+            <span class="title-decoration">二</span>
+            文章导出
+          </h2>
+
+          <div id="article-status" class="status-block">
+            <p class="status-empty">请先选择导出文件夹</p>
+          </div>
+
+          <div class="option-row">
+            <label class="field-label">
+              <span class="field-name">每批</span>
+              <input type="number" id="article-batch-size" value="50" min="1" max="500" class="field-number">
+              <span class="field-unit">篇</span>
+            </label>
+            <label class="check-label">
+              <input type="checkbox" id="opt-img" checked class="check-input">
+              <span class="check-box"><span class="check-tick">&#x2713;</span></span>
+              <span>存图</span>
+            </label>
+          </div>
+
+          <p class="note-text">含 Front Matter 元信息，供评论导出识别</p>
+
+          <div id="article-progress-wrap" class="progress-block hidden">
+            <div class="progress-track">
+              <div class="progress-fill" id="article-progress-fill"></div>
+            </div>
+            <progress id="article-progress" value="0" max="100" class="sr-only"></progress>
+            <span id="article-progress-text" class="progress-text"></span>
+          </div>
+
+          <button id="btn-export-articles" class="btn btn-vermillion" disabled>开始导出</button>
+        </section>
+
+        <!-- 评论导出 -->
+        <section class="card card-comment">
+          <h2 class="card-title">
+            <span class="title-decoration">三</span>
+            评论导出
+          </h2>
+
+          <div id="comment-status" class="status-block">
+            <p class="status-empty">请先选择导出文件夹</p>
+          </div>
+
+          <!-- 文章列表 -->
+          <div id="comment-article-list" class="article-list hidden">
+            <div class="list-toolbar">
+              <label class="check-label">
+                <input type="checkbox" id="comment-select-all" class="check-input">
+                <span class="check-box"><span class="check-tick">&#x2713;</span></span>
+                <span>全选</span>
+              </label>
+              <span id="comment-selected-count" class="selected-count">已选 0 篇</span>
+            </div>
+            <div class="list-header">
+              <span class="lh-check"></span>
+              <span class="lh-title">标题</span>
+              <span class="lh-author">作者</span>
+              <span class="lh-type">类型</span>
+              <span class="lh-time">收藏时间</span>
+              <span class="lh-meta">评论</span>
+            </div>
+            <div id="comment-list-items" class="list-items"></div>
+          </div>
+
+          <div id="comment-progress-wrap" class="progress-block hidden">
+            <div class="progress-track">
+              <div class="progress-fill" id="comment-progress-fill"></div>
+            </div>
+            <progress id="comment-progress" value="0" max="100" class="sr-only"></progress>
+            <span id="comment-progress-text" class="progress-text"></span>
+          </div>
+
+          <button id="btn-export-comments" class="btn btn-vermillion" disabled>导出选中文章的评论</button>
+        </section>
+      </div>
+
+      <!-- 日志 -->
+      <section class="card card-log">
+        <h2 class="card-title">
+          <span class="title-decoration">录</span>
+          操作日志
+        </h2>
+        <div id="log-output" class="log-scroll"></div>
+      </section>
+    </div>
+
+    <footer class="app-footer">
+      <div class="footer-line"></div>
+      <p>知乎收藏夹导出工具</p>
+    </footer>
+  </main>
+
+  <!-- 共享模块 -->
+  <script src="../lib/turndown.js"></script>
+  <script src="../lib/html-to-markdown.js"></script>
+  <script src="../lib/throttle.js"></script>
+  <script src="../lib/zhihu-api.js"></script>
+  <script src="../lib/progress.js"></script>
+  <script src="compat.js"></script>
+  <script src="../content/export-utils.js"></script>
+  <script src="export.js"></script>
+</body>
+</html>
