@@ -91,13 +91,11 @@ jobs:
       #   EDGE_PRODUCT_ID  — 产品 ID（从 Partner Center 获取）
       #   EDGE_CLIENT_ID   — API 客户端 ID
       #   EDGE_API_KEY     — API 密钥（client secret）
-      #   EDGE_ACCESS_TOKEN_URL — 访问令牌 URL
       - name: Publish to Edge Add-ons
         if: vars.EDGE_STORE_ENABLED == 'true'
-        uses: nicedoc/edge-addon-action@v1
+        uses: wdzeng/edge-addon@v2
         with:
           product-id: ${{ secrets.EDGE_PRODUCT_ID }}
+          zip-path: ${{ env.ZIP_NAME }}
           client-id: ${{ secrets.EDGE_CLIENT_ID }}
           api-key: ${{ secrets.EDGE_API_KEY }}
-          access-token-url: ${{ secrets.EDGE_ACCESS_TOKEN_URL }}
-          zip-path: ${{ env.ZIP_NAME }}
