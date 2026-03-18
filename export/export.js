@@ -19,8 +19,10 @@
 
   const params = new URLSearchParams(window.location.search);
   const collectionId = params.get('id') || '';
-  const collectionName = params.get('name') || '未知收藏夹';
+  const collectionName = params.get('name') || '未知';
   const collectionApiUrl = params.get('api') || '';
+  const sourceType = params.get('source') || 'collection'; // 'collection' | 'column'
+  const sourceLabel = sourceType === 'column' ? '专栏' : '收藏夹';
 
   // ============================
   // DOM 引用
@@ -31,7 +33,6 @@
     folderPath: document.getElementById('folder-path'),
     btnSelectFolder: document.getElementById('btn-select-folder'),
     articleStatus: document.getElementById('article-status'),
-    articleBatchSize: document.getElementById('article-batch-size'),
     optImg: document.getElementById('opt-img'),
     articleProgressWrap: document.getElementById('article-progress-wrap'),
     articleProgress: document.getElementById('article-progress'),
@@ -119,7 +120,8 @@
 
       let result;
       try {
-        result = await api.fetchCollectionPage(nextPageUrl);
+        const fetchFn = sourceType === 'column' ? api.fetchColumnPage : api.fetchCollectionPage;
+        result = await fetchFn(nextPageUrl);
       } catch (err) {
         log(`加载目录失败: ${err.message}`, 'error');
         return null;
@@ -128,6 +130,8 @@
       items.push(...result.items);
       nextPageUrl = result.nextUrl;
     }
+
+    hideArticleProgress();
 
     if (items.length === 0) return null;
 
@@ -220,15 +224,15 @@
   // ============================
 
   function init() {
-    els.collectionName.textContent = `收藏夹：${collectionName}`;
-    document.title = `导出管理器 - ${collectionName}`;
+    els.collectionName.textContent = `${sourceLabel}：${collectionName}`;
+    document.title = `导出管理器 - ${sourceLabel} - ${collectionName}`;
 
     els.btnSelectFolder.addEventListener('click', handleSelectFolder);
     els.btnExportArticles.addEventListener('click', handleExportArticles);
     els.btnExportComments.addEventListener('click', handleExportComments);
     document.getElementById('btn-refresh-dir').addEventListener('click', refreshDirectory);
 
-    log(`已加载收藏夹：${collectionName}（ID: ${collectionId}）`);
+    log(`已加载${sourceLabel}：${collectionName}（ID: ${collectionId}）`);
 
     // 页面打开时就加载目录
     loadDirectoryOnInit();
@@ -256,9 +260,6 @@
       progressData = await progress.readProgress(dirHandle, collectionId);
 
       if (progressData) {
-        if (progressData.articles.batchSize) {
-          els.articleBatchSize.value = progressData.articles.batchSize;
-        }
       } else {
         progressData = progress.createInitialProgress(collectionId, collectionName);
         log('未找到进度文件，将从头开始导出');
@@ -408,7 +409,7 @@
       els.btnExportArticles.textContent = '开始导出';
       els.btnExportArticles.disabled = false;
     } else {
-      els.btnExportArticles.textContent = `继续导出下一批（剩余 ${remaining} 篇）`;
+      els.btnExportArticles.textContent = `继续导出（剩余 ${remaining} 篇）`;
       els.btnExportArticles.disabled = false;
     }
   }
@@ -542,7 +543,37 @@
   }
 
   // ============================
-  // 文章导出（Task 7 实现）
+  // 文件命名规则
+  // ============================
+
+  /**
+   * 根据类型生成文件名：
+   * - 文章：直接用标题
+   * - 回答：问题标题-作者的回答
+   * - 想法：想法内容前30字-作者的想法
+   * - 其他：标题-作者的类型
+   */
+  function buildItemName(item, typeLabel, num) {
+    switch (item.type) {
+      case 'article':
+        return item.title || `${item.author}的文章_${num}`;
+      case 'answer':
+        return item.title
+          ? `${item.title}-${item.author}的回答`
+          : `${item.author}的回答_${num}`;
+      case 'pin':
+        return item.title
+          ? `${item.title}-${item.author}的想法`
+          : `${item.author}的想法_${num}`;
+      default:
+        return item.title
+          ? `${item.title}-${item.author}的${typeLabel}`
+          : `${item.author}的${typeLabel}_${num}`;
+    }
+  }
+
+  // ============================
+  // 文章导出
   // ============================
 
   async function handleExportArticles() {
@@ -550,8 +581,6 @@
     isExportingArticles = true;
     updateUI();
 
-    const batchSize = parseInt(els.articleBatchSize.value) || 50;
-    progressData.articles.batchSize = batchSize;
     const wantImg = els.optImg.checked;
 
     try {
@@ -595,10 +624,10 @@
         return;
       }
 
-      log(`待导出 ${pendingItems.length} 篇，本批最多 ${batchSize} 篇`);
+      log(`待导出 ${pendingItems.length} 篇`);
 
-      // Step 4: 导出本批
-      const batch = pendingItems.slice(0, batchSize);
+      // Step 4: 导出
+      const batch = pendingItems;
       let exportedInBatch = 0;
       const usedNames = new Set();
       const tocEntries = [];
@@ -607,11 +636,7 @@
         exportedInBatch++;
         const num = progressData.articles.totalExported + exportedInBatch;
         const typeLabel = u.TYPE_LABELS[item.type] || item.type;
-        let baseName = u.sanitizeFilename(
-          item.title
-            ? `${item.title}-${item.author}的${typeLabel}`
-            : `${item.author}的${typeLabel}_${num}`
-        );
+        let baseName = u.sanitizeFilename(buildItemName(item, typeLabel, num));
         if (usedNames.has(baseName)) baseName = `${baseName}_${num}`;
         usedNames.add(baseName);
 
@@ -774,11 +799,7 @@
 
             // 生成评论文件名（和文章文件名对应）
             const typeLabel = u.TYPE_LABELS[item.type] || item.type;
-            const baseName = u.sanitizeFilename(
-              item.title
-                ? `${item.title}-${item.author}的${typeLabel}`
-                : `${item.author}的${typeLabel}`
-            );
+            const baseName = u.sanitizeFilename(buildItemName(item, typeLabel, 0));
             const commentMd = buildCommentsMarkdown(comments, displayTitle, commentImageMapping);
             const commentFilename = `${baseName}-评论.md`;
             await u.writeTextFile(articlesFolder, commentFilename, commentMd);

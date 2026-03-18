@@ -277,13 +277,15 @@
     panel.appendChild(body);
 
     if (!pageInfo) {
-      body.innerHTML = '<div class="status-msg">当前页面不是可导出的知乎内容<br><span style="font-size:12px;color:#aaa;">支持：文章、回答、问题、想法、收藏夹</span></div>';
+      body.innerHTML = '<div class="status-msg">当前页面不是可导出的知乎内容<br><span style="font-size:12px;color:#aaa;">支持：文章、回答、问题、想法、收藏夹、专栏</span></div>';
       shadow.appendChild(panel);
       return;
     }
 
     if (pageInfo.type === 'collection') {
       window.__renderCollectionPanel(body);
+    } else if (pageInfo.type === 'column') {
+      window.__renderColumnPanel(body);
     } else {
       window.__renderArticlePanel(body, pageInfo);
     }

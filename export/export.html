@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>知乎收藏夹导出管理器</title>
+  <title>知乎导出管理器</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -20,7 +20,7 @@
     <header class="app-header">
       <div class="seal-mark" aria-hidden="true">藏</div>
       <div class="header-center">
-        <h1 class="app-title">收藏夹导出</h1>
+        <h1 class="app-title">导出管理器</h1>
         <p id="collection-name" class="app-subtitle">加载中...</p>
       </div>
       <button id="btn-refresh-dir" class="btn btn-ink btn-small" title="重新从 API 加载并更新缓存（检查新增内容）">
@@ -68,11 +68,6 @@
           </div>
 
           <div class="option-row">
-            <label class="field-label">
-              <span class="field-name">每批</span>
-              <input type="number" id="article-batch-size" value="50" min="1" max="500" class="field-number">
-              <span class="field-unit">篇</span>
-            </label>
             <label class="check-label">
               <input type="checkbox" id="opt-img" checked class="check-input">
               <span class="check-box"><span class="check-tick">&#x2713;</span></span>
@@ -149,7 +144,7 @@
 
     <footer class="app-footer">
       <div class="footer-line"></div>
-      <p>知乎收藏夹导出工具</p>
+      <p>知乎导出工具</p>
     </footer>
   </main>
 

@@ -184,6 +184,42 @@
   }
 
   // ============================
+  // 专栏信息（需要 DOM）
+  // ============================
+
+  function getColumnInfo() {
+    const url = window.location.href;
+    const match = url.match(/zhihu\.com\/column\/(c_\d+)/);
+    if (!match) return null;
+
+    const id = match[1];
+
+    // 从页面标题提取，去掉 "(N 条消息)" 前缀和 " - 知乎" 后缀
+    let title = '';
+    const pageTitle = (document.title || '').replace(/^\(\d+\s*条消息\)\s*/, '');
+    if (pageTitle) {
+      title = pageTitle.split(' - ')[0].trim();
+    }
+
+    // 兜底：从初始数据或 meta 提取
+    if (!title) {
+      const metaDesc = document.querySelector('meta[name="description"]');
+      title = metaDesc?.content?.trim() || '';
+    }
+
+    if (!title) {
+      title = document.querySelector('h1')?.textContent?.trim() || `专栏${id}`;
+    }
+
+    return {
+      id,
+      title,
+      itemCount: 0,
+      apiUrl: `https://www.zhihu.com/api/v4/columns/${id}/items`,
+    };
+  }
+
+  // ============================
   // 导出到 window（兼容现有调用方）
   // ============================
 
@@ -191,7 +227,9 @@
     detectPage: zhihuApi.detectPage,
     extractContent,
     getCollectionInfo,
+    getColumnInfo,
     fetchCollectionPage: zhihuApi.fetchCollectionPage,
+    fetchColumnPage: zhihuApi.fetchColumnPage,
     fetchAllComments: zhihuApi.fetchAllComments,
   };
 
