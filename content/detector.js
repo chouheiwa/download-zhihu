@@ -1,33 +1,13 @@
 /**
- * 数据层：知乎页面检测 + 内容提取 + 收藏夹 API
+ * 数据层：知乎页面检测 + 内容提取 + 收藏夹信息
+ * 依赖 lib/zhihu-api.js（API 调用层）
  * 所有函数挂载到 window.__zhihuDownloader 供 floating-ui.js 调用
  */
 
 (() => {
   'use strict';
 
-  // ============================
-  // 页面类型检测
-  // ============================
-
-  function detectPage(url) {
-    const patterns = [
-      { type: 'answer', regex: /zhihu\.com\/question\/(\d+)\/answer\/(\d+)/ },
-      { type: 'article', regex: /zhuanlan\.zhihu\.com\/p\/(\d+)/ },
-      { type: 'question', regex: /zhihu\.com\/question\/(\d+)\/?(\?|$|#)/ },
-      { type: 'pin', regex: /zhihu\.com\/pin\/(\d+)/ },
-      { type: 'collection', regex: /zhihu\.com\/collection\/(\d+)/ },
-    ];
-
-    for (const { type, regex } of patterns) {
-      const match = url.match(regex);
-      if (match) {
-        const id = type === 'answer' ? match[2] : match[1];
-        return { type, id };
-      }
-    }
-    return null;
-  }
+  const zhihuApi = window.__zhihuApi;
 
   // ============================
   // 单篇内容提取
@@ -35,7 +15,7 @@
 
   function extractContent() {
     const url = window.location.href;
-    const pageInfo = detectPage(url);
+    const pageInfo = zhihuApi.detectPage(url);
     if (!pageInfo || pageInfo.type === 'collection') {
       return null;
     }
@@ -181,7 +161,7 @@
   }
 
   // ============================
-  // 收藏夹
+  // 收藏夹信息（需要 DOM）
   // ============================
 
   function getCollectionInfo() {
@@ -190,8 +170,6 @@
     if (!match) return null;
 
     const id = match[1];
-
-    // 尝试多种选择器获取收藏夹标题
     const titleEl =
       document.querySelector('.CollectionDetailPageHeader-title') ||
       document.querySelector('[class*="CollectionDetail"] h2') ||
@@ -200,131 +178,76 @@
     return {
       id,
       title: titleEl?.textContent?.trim() || `收藏夹${id}`,
-      itemCount: 0, // 由 API 获取真实数量
+      itemCount: 0,
       apiUrl: `https://www.zhihu.com/api/v4/collections/${id}/items?offset=0&limit=20`,
     };
   }
 
-  async function fetchCollectionPage(apiUrl) {
-    const response = await fetch(apiUrl, {
-      credentials: 'include',
-      headers: { 'Accept': 'application/json' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`API 请求失败: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const paging = data.paging || {};
-    const items = (data.data || []).map((item) => {
-      const c = item.content || {};
-      const type = c.type || 'unknown';
-
-      let title = '';
-      if (type === 'article') {
-        title = c.title || '';
-      } else if (type === 'answer') {
-        title = c.question?.title || '';
-      }
-
-      return {
-        type,
-        url: c.url || '',
-        title,
-        author: c.author?.name || '知乎用户',
-        html: c.content || '',
-      };
-    });
-
-    return {
-      items,
-      nextUrl: paging.is_end ? null : (paging.next || null),
-      totals: paging.totals || 0,
-    };
-  }
-
   // ============================
-  // 评论 API
-  // ============================
-
-  const COMMENT_TYPE_MAP = {
-    article: 'articles',
-    answer: 'answers',
-    pin: 'pins',
-  };
-
-  async function fetchRootComments(type, id) {
-    const apiType = COMMENT_TYPE_MAP[type];
-    if (!apiType) return { comments: [], totals: 0 };
-
-    const comments = [];
-    let totals = 0;
-    let nextUrl = `https://www.zhihu.com/api/v4/comment_v5/${apiType}/${id}/root_comment?order_by=ts&limit=20&offset=`;
-
-    while (nextUrl) {
-      const response = await fetch(nextUrl, {
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!response.ok) throw new Error(`评论 API 请求失败: ${response.status}`);
-
-      const data = await response.json();
-      const paging = data.paging || {};
-      totals = paging.totals ?? totals;
-      comments.push(...(data.data || []));
-      nextUrl = paging.is_end ? null : (paging.next || null);
-    }
-
-    return { comments, totals };
-  }
-
-  async function fetchChildComments(rootCommentId) {
-    const children = [];
-    let nextUrl = `https://www.zhihu.com/api/v4/comment_v5/comment/${rootCommentId}/child_comment?order_by=ts&limit=20&offset=`;
-
-    while (nextUrl) {
-      const response = await fetch(nextUrl, {
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!response.ok) break;
-
-      const data = await response.json();
-      const paging = data.paging || {};
-      children.push(...(data.data || []));
-      nextUrl = paging.is_end ? null : (paging.next || null);
-    }
-
-    return children;
-  }
-
-  async function fetchAllComments(type, id, onProgress) {
-    const { comments } = await fetchRootComments(type, id);
-
-    for (let i = 0; i < comments.length; i++) {
-      const comment = comments[i];
-
-      if (comment.child_comment_count > 0 &&
-          (comment.child_comments || []).length < comment.child_comment_count) {
-        comment.child_comments = await fetchChildComments(comment.id);
-      }
-
-      if (onProgress) onProgress(i + 1, comments.length);
-    }
-
-    return comments;
-  }
-
-  // ============================
-  // 导出到 window
+  // 导出到 window（兼容现有调用方）
   // ============================
 
   window.__zhihuDownloader = {
-    detectPage,
+    detectPage: zhihuApi.detectPage,
     extractContent,
     getCollectionInfo,
-    fetchCollectionPage,
-    fetchAllComments,
+    fetchCollectionPage: zhihuApi.fetchCollectionPage,
+    fetchAllComments: zhihuApi.fetchAllComments,
   };
+
+  // ============================
+  // Fetch 代理：通过页面上下文发起请求
+  // 页面 JS 环境中的 fetch 会被知乎的请求拦截器自动加上 x-zse 签名头
+  // ============================
+
+  // 1. 注入桥接脚本到页面 JS 上下文（外部文件，不受 CSP 限制）
+  const bridgeScript = document.createElement('script');
+  bridgeScript.src = chrome.runtime.getURL('content/fetch-bridge.js');
+  (document.head || document.documentElement).appendChild(bridgeScript);
+  bridgeScript.onload = () => bridgeScript.remove();
+
+  // 2. Content script 侧：管理请求/响应
+  const pendingRequests = new Map();
+  let requestIdCounter = 0;
+
+  window.addEventListener('__zhihu_dl_fetch_response', (e) => {
+    const { id, data, error } = e.detail;
+    const pending = pendingRequests.get(id);
+    if (pending) {
+      pendingRequests.delete(id);
+      if (error) {
+        pending.reject(new Error(error));
+      } else {
+        pending.resolve(data);
+      }
+    }
+  });
+
+  function pageFetch(url) {
+    return new Promise((resolve, reject) => {
+      const id = ++requestIdCounter;
+      pendingRequests.set(id, { resolve, reject });
+      window.dispatchEvent(new CustomEvent('__zhihu_dl_fetch_request', {
+        detail: { id, url }
+      }));
+      // 超时 30 秒
+      setTimeout(() => {
+        if (pendingRequests.has(id)) {
+          pendingRequests.delete(id);
+          reject(new Error('页面代理请求超时'));
+        }
+      }, 30000);
+    });
+  }
+
+  // 3. 接收 service worker 转发的请求，通过页面上下文代理
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action !== 'fetchProxy') return;
+
+    pageFetch(message.url)
+      .then((data) => sendResponse({ data }))
+      .catch((err) => sendResponse({ error: err.message }));
+
+    return true;
+  });
 })();

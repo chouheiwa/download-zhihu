@@ -3,7 +3,14 @@
   "name": "知乎文章下载器",
   "description": "将知乎文章、回答、问题、想法、收藏夹导出为 Markdown 文件",
   "version": "1.2.0",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "storage", "unlimitedStorage"],
+  "host_permissions": [
+    "https://www.zhihu.com/*",
+    "https://zhuanlan.zhihu.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -19,6 +26,8 @@
         "lib/turndown.js",
         "lib/jszip.min.js",
         "lib/html-to-markdown.js",
+        "lib/throttle.js",
+        "lib/zhihu-api.js",
         "content/detector.js",
         "content/export-utils.js",
         "content/article-panel.js",
@@ -30,7 +39,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon48.png"],
+      "resources": ["icons/icon48.png", "content/fetch-bridge.js"],
       "matches": ["https://www.zhihu.com/*", "https://zhuanlan.zhihu.com/*"]
     }
   ]

@@ -24,6 +24,7 @@
   function buildFrontmatter(data) {
     return [
       '---',
+      `id: "${data.id || ''}"`,
       `title: "${(data.title || '').replace(/"/g, '\\"')}"`,
       `author: "${(data.author || '').replace(/"/g, '\\"')}"`,
       `type: zhihu-${data.type}`,
