@@ -189,7 +189,7 @@
 
   function getColumnInfo() {
     const url = window.location.href;
-    const match = url.match(/zhihu\.com\/column\/(c_\d+)/);
+    const match = url.match(/zhihu\.com\/column\/([^/?#]+)/);
     if (!match) return null;
 
     const id = match[1];

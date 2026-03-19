@@ -43,6 +43,7 @@
   function sanitizeFilename(name) {
     return name
       .replace(/<[^>]*>/g, '')
+      .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF\u00AD\u0000-\u001F\u007F]/g, '')
       .replace(/[\\/:*?"<>|#^\[\]()（）]/g, '')
       .replace(/\s+/g, ' ')
       .trim()

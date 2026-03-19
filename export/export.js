@@ -11,8 +11,6 @@
   const u = window.__exportUtils;
   const { htmlToMarkdown, extractImageUrls, buildCommentsMarkdown } = window;
 
-  const PAGE_SIZE = 20; // 知乎 API 每页返回条目数
-
   // ============================
   // URL 参数解析
   // ============================
@@ -52,8 +50,7 @@
 
   let dirHandle = null;
   let progressData = null;
-  let currentTotal = 0;
-  let cachedItems = null; // 缓存收藏夹全部条目，避免重复加载
+  let cachedItems = null; // 最近一次导出拉取的条目，供评论列表使用
   let isExportingArticles = false;
   let isExportingComments = false;
 
@@ -81,106 +78,35 @@
   });
 
   // ============================
-  // 目录缓存（chrome.storage.local）
+  // 逐页拉取 API 目录
   // ============================
 
-  const CACHE_KEY = `dir_${collectionId}`;
-
   /**
-   * 加载目录：有缓存直接用，没有才从 API 拉取
+   * 逐页拉取目录，每拉到一页就调用 onPage 回调处理
+   * @param {function} onPage - async (items, pageNum) => void
    */
-  async function loadDirectory() {
-    // 尝试读缓存
-    try {
-      const stored = await chrome.storage.local.get(CACHE_KEY);
-      const cached = stored[CACHE_KEY]?.items;
-      if (cached && cached.length > 0) {
-        currentTotal = cached.length;
-        log(`从缓存加载目录（${cached.length} 篇）`);
-        return cached;
-      }
-    } catch { /* 缓存读取失败 */ }
-
-    // 无缓存，从 API 拉取
-    return await fetchDirectoryFromAPI();
-  }
-
-  /**
-   * 从 API 拉取完整目录并写入缓存
-   */
-  async function fetchDirectoryFromAPI() {
-    log('正在从 API 加载收藏夹目录...');
-    const items = [];
+  async function fetchDirectoryPages(onPage) {
+    const fetchFn = sourceType === 'column' ? api.fetchColumnPage : api.fetchCollectionPage;
     let nextPageUrl = collectionApiUrl;
     let pageNum = 0;
 
     while (nextPageUrl) {
       pageNum++;
-      showArticleProgress(0, 1, `正在加载第 ${pageNum} 页目录...`);
 
       let result;
       try {
-        const fetchFn = sourceType === 'column' ? api.fetchColumnPage : api.fetchCollectionPage;
         result = await fetchFn(nextPageUrl);
       } catch (err) {
-        log(`加载目录失败: ${err.message}`, 'error');
-        return null;
+        log(`加载第 ${pageNum} 页目录失败: ${err.message}`, 'error');
+        return;
       }
 
-      items.push(...result.items);
+      if (result.items.length > 0) {
+        await onPage(result.items, pageNum);
+      }
+
       nextPageUrl = result.nextUrl;
     }
-
-    hideArticleProgress();
-
-    if (items.length === 0) return null;
-
-    // 按收藏时间升序
-    items.sort((a, b) => (a.created_time || 0) - (b.created_time || 0));
-    currentTotal = items.length;
-    log(`目录加载完成，共 ${items.length} 篇`);
-
-    // 写入缓存
-    try {
-      await chrome.storage.local.set({ [CACHE_KEY]: { items } });
-      log('目录已缓存');
-    } catch {
-      log('缓存写入失败（数据量过大），不影响使用', 'warn');
-    }
-
-    return items;
-  }
-
-  /**
-   * 刷新目录：重新从 API 拉取，合并缓存中的 html 内容
-   */
-  async function refreshDirectory() {
-    const oldCache = cachedItems || [];
-    const freshItems = await fetchDirectoryFromAPI();
-    if (!freshItems) return;
-
-    // 用旧缓存的 html 补充新数据中缺失的内容
-    if (oldCache.length > 0) {
-      const oldMap = new Map();
-      for (const item of oldCache) {
-        if (item.id) oldMap.set(item.id, item);
-      }
-      for (const item of freshItems) {
-        const old = item.id ? oldMap.get(item.id) : null;
-        if (old && !item.html && old.html) {
-          item.html = old.html;
-        }
-      }
-
-      const diff = freshItems.length - oldCache.length;
-      if (diff > 0) log(`发现 ${diff} 篇新增内容`, 'success');
-      else if (diff < 0) log(`收藏夹减少了 ${-diff} 篇`, 'warn');
-      else log('目录无变化');
-    }
-
-    cachedItems = freshItems;
-    hideArticleProgress();
-    updateUI();
   }
 
   // ============================
@@ -230,21 +156,9 @@
     els.btnSelectFolder.addEventListener('click', handleSelectFolder);
     els.btnExportArticles.addEventListener('click', handleExportArticles);
     els.btnExportComments.addEventListener('click', handleExportComments);
-    document.getElementById('btn-refresh-dir').addEventListener('click', refreshDirectory);
 
     log(`已加载${sourceLabel}：${collectionName}（ID: ${collectionId}）`);
-
-    // 页面打开时就加载目录
-    loadDirectoryOnInit();
-  }
-
-  async function loadDirectoryOnInit() {
-    try {
-      cachedItems = await loadDirectory();
-      updateUI();
-    } catch (err) {
-      log(`加载目录失败: ${err.message}`, 'error');
-    }
+    updateUI();
   }
 
   // ============================
@@ -267,11 +181,6 @@
 
       // 扫描实际文件校准计数（进度文件计数器可能漂移）
       await reconcileProgress();
-
-      // 加载目录（评论列表需要文章数据）
-      if (!cachedItems) {
-        cachedItems = await loadDirectory();
-      }
 
       log(`已导出 ${progressData.articles.totalExported} 篇文章、${progressData.comments.totalExported} 篇评论`);
       updateUI();
@@ -377,39 +286,20 @@
 
   function updateArticleUI() {
     const exported = progressData.articles.totalExported;
-    const total = currentTotal;
-    const remaining = Math.max(0, total - exported);
-    const pct = total > 0 ? Math.round((exported / total) * 100) : 0;
 
-    let statusHtml = `<p>已导出 ${exported} / ${total} 篇`;
+    let statusHtml = `<p>已导出 ${exported} 篇`;
     if (progressData.articles.newestExportedTime) {
       const date = new Date(progressData.articles.newestExportedTime).toLocaleDateString('zh-CN');
       statusHtml += `（截至 ${date}）`;
     }
     statusHtml += `</p>`;
-    statusHtml += `<progress value="${pct}" max="100"></progress>`;
     els.articleStatus.innerHTML = statusHtml;
-
-    // 检测新增：对比当前总数和上次记录的总数
-    const hasNew = exported > 0 &&
-      progressData.articles.totalAtLastExport > 0 &&
-      currentTotal > progressData.articles.totalAtLastExport;
-    const newCount = hasNew ? currentTotal - progressData.articles.totalAtLastExport : 0;
 
     if (isExportingArticles) {
       els.btnExportArticles.textContent = '导出中...';
       els.btnExportArticles.disabled = true;
-    } else if (hasNew) {
-      els.btnExportArticles.textContent = `导出新增内容（${newCount} 篇）`;
-      els.btnExportArticles.disabled = false;
-    } else if (remaining === 0 && exported > 0) {
-      els.btnExportArticles.textContent = '已全部导出 ✓';
-      els.btnExportArticles.disabled = true;
-    } else if (exported === 0) {
-      els.btnExportArticles.textContent = '开始导出';
-      els.btnExportArticles.disabled = false;
     } else {
-      els.btnExportArticles.textContent = `继续导出（剩余 ${remaining} 篇）`;
+      els.btnExportArticles.textContent = exported > 0 ? '导出全部（跳过已导出）' : '开始导出';
       els.btnExportArticles.disabled = false;
     }
   }
@@ -594,98 +484,75 @@
         imagesFolder = await articlesFolder.getDirectoryHandle('images', { create: true });
       }
 
-      // Step 1: 加载目录（内存缓存 → storage 缓存 → API 拉取）
-      if (!cachedItems) {
-        cachedItems = await loadDirectory();
-      } else {
-        log(`使用缓存目录（${cachedItems.length} 篇）`);
-      }
-
-      if (!cachedItems || cachedItems.length === 0) {
-        log('收藏夹为空', 'warn');
-        cachedItems = null;
-        isExportingArticles = false;
-        hideArticleProgress();
-        updateUI();
-        return;
-      }
-
-      const allItems = cachedItems;
-
-      // Step 2: 用 ID 过滤已导出的
       const exportedIds = new Set(progressData.articles.exportedIds || []);
-      const pendingItems = allItems.filter((item) => item.id && !exportedIds.has(item.id));
-
-      if (pendingItems.length === 0) {
-        log('没有需要导出的新内容', 'warn');
-        isExportingArticles = false;
-        hideArticleProgress();
-        updateUI();
-        return;
-      }
-
-      log(`待导出 ${pendingItems.length} 篇`);
-
-      // Step 4: 导出
-      const batch = pendingItems;
-      let exportedInBatch = 0;
       const usedNames = new Set();
-      const tocEntries = [];
+      let exportedInBatch = 0;
+      const allItems = []; // 收集所有条目供评论列表使用
 
-      for (const item of batch) {
-        exportedInBatch++;
-        const num = progressData.articles.totalExported + exportedInBatch;
-        const typeLabel = u.TYPE_LABELS[item.type] || item.type;
-        let baseName = u.sanitizeFilename(buildItemName(item, typeLabel, num));
-        if (usedNames.has(baseName)) baseName = `${baseName}_${num}`;
-        usedNames.add(baseName);
+      // 逐页拉取、逐页处理
+      await fetchDirectoryPages(async (pageItems, pageNum) => {
+        allItems.push(...pageItems);
 
-        // 检查磁盘上是否已存在同名文件
-        let filename = `${baseName}.md`;
-        try {
-          await articlesFolder.getFileHandle(filename);
-          filename = `${baseName}_${num}.md`;
-        } catch { /* 文件不存在，正常 */ }
-
-        showArticleProgress(exportedInBatch, batch.length,
-          `正在处理 ${exportedInBatch}/${batch.length}: ${(item.title || '').slice(0, 20)}...`);
-        log(`处理 [${exportedInBatch}/${batch.length}]: ${item.title || baseName}`);
-
-        // 图片处理
-        let imageMapping = {};
-        if (wantImg && item.html) {
-          const imgUrls = extractImageUrls(item.html);
-          if (imgUrls.length > 0 && imagesFolder) {
-            const prefix = `${String(num).padStart(3, '0')}_`;
-            const imgResult = await u.batchDownloadImagesToFolder(imgUrls, prefix, imagesFolder);
-            imageMapping = imgResult.imageMapping;
-          }
+        // 过滤已导出的
+        const pending = pageItems.filter((item) => item.id && !exportedIds.has(item.id));
+        if (pending.length === 0) {
+          log(`第 ${pageNum} 页全部已导出，跳过`);
+          return;
         }
 
-        // 转换 Markdown（始终生成 Front Matter）
-        let md = htmlToMarkdown(item.html || '', imageMapping);
-        md = u.buildFrontmatter(item) + md;
+        log(`第 ${pageNum} 页：${pageItems.length} 篇，待导出 ${pending.length} 篇`);
 
-        // 写入文件
-        await u.writeTextFile(articlesFolder, filename, md);
+        for (const item of pending) {
+          exportedInBatch++;
+          const num = progressData.articles.totalExported + 1;
+          const typeLabel = u.TYPE_LABELS[item.type] || item.type;
+          let baseName = u.sanitizeFilename(buildItemName(item, typeLabel, num));
+          if (usedNames.has(baseName)) baseName = `${baseName}_${num}`;
+          usedNames.add(baseName);
 
-        // 逐篇更新进度（中途中断也不丢）
-        await progress.addExportedArticle(dirHandle, collectionId, progressData, item.id);
+          // 检查磁盘上是否已存在同名文件
+          let filename = `${baseName}.md`;
+          try {
+            await articlesFolder.getFileHandle(filename);
+            filename = `${baseName}_${num}.md`;
+          } catch { /* 文件不存在，正常 */ }
 
-        tocEntries.push({
-          num,
-          title: item.title || `${item.author}的${typeLabel}`,
-          author: item.author,
-          type: item.type,
-          filename,
-          url: item.url,
-        });
-      }
+          showArticleProgress(0, 1,
+            `第 ${pageNum} 页 - 正在处理: ${(item.title || '').slice(0, 20)}...`);
+          log(`处理 [${exportedInBatch}]: ${item.title || baseName}`);
 
-      // Step 5: 更新 README
+          // 图片处理
+          let imageMapping = {};
+          if (wantImg && item.html) {
+            const imgUrls = extractImageUrls(item.html);
+            if (imgUrls.length > 0 && imagesFolder) {
+              const prefix = `${String(num).padStart(3, '0')}_`;
+              const imgResult = await u.batchDownloadImagesToFolder(imgUrls, prefix, imagesFolder);
+              imageMapping = imgResult.imageMapping;
+            }
+          }
+
+          // 转换 Markdown（始终生成 Front Matter）
+          let md = htmlToMarkdown(item.html || '', imageMapping);
+          md = u.buildFrontmatter(item) + md;
+
+          // 写入文件
+          await u.writeTextFile(articlesFolder, filename, md);
+
+          // 逐篇更新进度（中途中断也不丢）
+          await progress.addExportedArticle(dirHandle, collectionId, progressData, item.id);
+          exportedIds.add(item.id);
+        }
+      });
+
+      cachedItems = allItems.length > 0 ? allItems : null;
+
+      // 更新 README
       if (exportedInBatch > 0) {
         await updateReadme(collectionFolder);
-        log(`本批完成：导出 ${exportedInBatch} 篇，共已导出 ${progressData.articles.totalExported} 篇`, 'success');
+        log(`导出完成：本次导出 ${exportedInBatch} 篇，共已导出 ${progressData.articles.totalExported} 篇`, 'success');
+      } else {
+        log('没有需要导出的新内容', 'warn');
       }
     } catch (err) {
       log(`导出失败: ${err.message}`, 'error');
