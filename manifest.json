@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "知乎文章下载器",
   "description": "将知乎文章、回答、问题、想法、收藏夹导出为 Markdown 文件",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "permissions": ["activeTab", "storage", "unlimitedStorage"],
   "host_permissions": [
     "https://www.zhihu.com/*",
