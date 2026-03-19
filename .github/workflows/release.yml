@@ -11,6 +11,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      zip_name: ${{ steps.build.outputs.ZIP_NAME }}
 
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +32,7 @@ jobs:
           fi
 
       - name: Build ZIP
+        id: build
         run: |
           ZIP_NAME="DownloadZhihu-v${{ steps.version.outputs.VERSION }}.zip"
           zip -r "$ZIP_NAME" \
@@ -39,46 +43,67 @@ jobs:
             lib/ \
             icons/ \
             -x "*.DS_Store"
-          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: ${{ steps.build.outputs.ZIP_NAME }}
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: v${{ steps.version.outputs.VERSION }}
+          name: v${{ needs.build.outputs.version }}
           body: |
             ## 安装方法
 
             ### Chrome
-            1. 下载下方的 `DownloadZhihu-v${{ steps.version.outputs.VERSION }}.zip` 文件
+            1. 下载下方的 `${{ needs.build.outputs.zip_name }}` 文件
             2. 解压到一个固定位置
             3. 打开 Chrome，访问 `chrome://extensions/`
             4. 右上角开启「开发者模式」
             5. 点击「加载已解压的扩展程序」，选择解压后的文件夹
 
             ### Edge
-            1. 下载下方的 `DownloadZhihu-v${{ steps.version.outputs.VERSION }}.zip` 文件
+            1. 下载下方的 `${{ needs.build.outputs.zip_name }}` 文件
             2. 解压到一个固定位置
             3. 打开 Edge，访问 `edge://extensions/`
             4. 左下角开启「开发人员模式」
             5. 点击「加载解压缩的扩展」，选择解压后的文件夹
 
             访问知乎任意文章/回答/收藏夹/专栏页面，右下角会出现蓝色浮动按钮。
-          files: ${{ env.ZIP_NAME }}
+          files: ${{ needs.build.outputs.zip_name }}
 
-      # ==========================================
-      # Chrome Web Store 自动发布（Service Account + Chrome Web Store API V2）
-      # ==========================================
-      # 需要在仓库 Settings → Secrets 中配置：
-      #   CHROME_EXTENSION_ID          — 扩展 ID
-      #   CHROME_PUBLISHER_ID          — 发布者 ID（从开发者控制台获取）
-      #   CHROME_SERVICE_ACCOUNT_JSON  — Service Account JSON 密钥（整个文件内容）
-      #
-      # Service Account 设置步骤：
-      #   1. 在 Google Cloud Console 启用 Chrome Web Store API
-      #   2. 创建 Service Account 并下载 JSON 密钥
-      #   3. 在 Chrome 开发者控制台 → 账号 中添加该 Service Account 邮箱
+  # ==========================================
+  # Chrome Web Store 自动发布（Service Account + Chrome Web Store API V2）
+  # ==========================================
+  # 需要在仓库 Settings → Secrets 中配置：
+  #   CHROME_EXTENSION_ID          — 扩展 ID
+  #   CHROME_PUBLISHER_ID          — 发布者 ID（从开发者控制台获取）
+  #   CHROME_SERVICE_ACCOUNT_JSON  — Service Account JSON 密钥（整个文件内容）
+  publish-chrome:
+    needs: build
+    if: vars.CHROME_STORE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
+
       - name: Publish to Chrome Web Store
-        if: vars.CHROME_STORE_ENABLED == 'true'
         env:
           CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
           CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
@@ -130,7 +155,7 @@ jobs:
           UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
             -X POST \
-            -T "${{ env.ZIP_NAME }}" \
+            -T "${{ needs.build.outputs.zip_name }}" \
             "https://chromewebstore.googleapis.com/upload/v2/publishers/${CHROME_PUBLISHER_ID}/items/${CHROME_EXTENSION_ID}:upload")
           UPLOAD_HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
           UPLOAD_BODY=$(echo "$UPLOAD_RESPONSE" | sed '$d')
@@ -159,18 +184,28 @@ jobs:
           echo "Extension published successfully!"
           echo "::endgroup::"
 
-      # ==========================================
-      # Edge Add-ons 自动发布
-      # ==========================================
-      # 需要在仓库 Settings → Secrets 中配置：
-      #   EDGE_PRODUCT_ID  — 产品 ID（从 Partner Center 获取）
-      #   EDGE_CLIENT_ID   — API 客户端 ID
-      #   EDGE_API_KEY     — API 密钥（client secret）
+  # ==========================================
+  # Edge Add-ons 自动发布
+  # ==========================================
+  # 需要在仓库 Settings → Secrets 中配置：
+  #   EDGE_PRODUCT_ID  — 产品 ID（从 Partner Center 获取）
+  #   EDGE_CLIENT_ID   — API 客户端 ID
+  #   EDGE_API_KEY     — API 密钥（client secret）
+  publish-edge:
+    needs: build
+    if: vars.EDGE_STORE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
+
       - name: Publish to Edge Add-ons
-        if: vars.EDGE_STORE_ENABLED == 'true'
         uses: wdzeng/edge-addon@v2
         with:
           product-id: ${{ secrets.EDGE_PRODUCT_ID }}
-          zip-path: ${{ env.ZIP_NAME }}
+          zip-path: ${{ needs.build.outputs.zip_name }}
           client-id: ${{ secrets.EDGE_CLIENT_ID }}
           api-key: ${{ secrets.EDGE_API_KEY }}
