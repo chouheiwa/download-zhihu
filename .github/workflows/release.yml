@@ -66,38 +66,98 @@ jobs:
           files: ${{ env.ZIP_NAME }}
 
       # ==========================================
-      # Chrome Web Store 自动发布
+      # Chrome Web Store 自动发布（Service Account + Chrome Web Store API V2）
       # ==========================================
-      # 方式一：Service Account（推荐，无需 refresh_token）
+      # 需要在仓库 Settings → Secrets 中配置：
       #   CHROME_EXTENSION_ID          — 扩展 ID
+      #   CHROME_PUBLISHER_ID          — 发布者 ID（从开发者控制台获取）
       #   CHROME_SERVICE_ACCOUNT_JSON  — Service Account JSON 密钥（整个文件内容）
       #
-      # 方式二：OAuth 2.0（需要 refresh_token）
-      #   CHROME_EXTENSION_ID    — 扩展 ID
-      #   CHROME_CLIENT_ID       — OAuth 2.0 客户端 ID
-      #   CHROME_CLIENT_SECRET   — OAuth 2.0 客户端密钥
-      #   CHROME_REFRESH_TOKEN   — OAuth 2.0 刷新令牌
+      # Service Account 设置步骤：
+      #   1. 在 Google Cloud Console 启用 Chrome Web Store API
+      #   2. 创建 Service Account 并下载 JSON 密钥
+      #   3. 在 Chrome 开发者控制台 → 账号 中添加该 Service Account 邮箱
+      - name: Publish to Chrome Web Store
+        if: vars.CHROME_STORE_ENABLED == 'true'
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CHROME_SERVICE_ACCOUNT_JSON: ${{ secrets.CHROME_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -e
 
-      # 方式一：Service Account
-      - name: Publish to Chrome Web Store (Service Account)
-        if: vars.CHROME_STORE_ENABLED == 'true' && vars.CHROME_AUTH_MODE != 'oauth'
-        uses: browser-actions/release-chrome-extension@latest
-        with:
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          extension-path: ${{ env.ZIP_NAME }}
-          service-account-json: ${{ secrets.CHROME_SERVICE_ACCOUNT_JSON }}
+          # 1. 从 Service Account JSON 中提取信息并构造 JWT
+          echo "::group::Fetching access token via Service Account"
+          SA_EMAIL=$(echo "$CHROME_SERVICE_ACCOUNT_JSON" | jq -r '.client_email')
+          SA_KEY=$(echo "$CHROME_SERVICE_ACCOUNT_JSON" | jq -r '.private_key')
 
-      # 方式二：OAuth 2.0
-      - name: Publish to Chrome Web Store (OAuth)
-        if: vars.CHROME_STORE_ENABLED == 'true' && vars.CHROME_AUTH_MODE == 'oauth'
-        uses: mnao305/chrome-extension-upload@v5.0.0
-        with:
-          file-path: ${{ env.ZIP_NAME }}
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          publish: true
+          NOW=$(date +%s)
+          EXP=$((NOW + 3600))
+          SCOPE="https://www.googleapis.com/auth/chromewebstore"
+          TOKEN_URI="https://oauth2.googleapis.com/token"
+
+          # Base64url 编码函数
+          b64url() {
+            openssl base64 -A | tr '+/' '-_' | tr -d '='
+          }
+
+          # 构造 JWT Header 和 Payload
+          JWT_HEADER=$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)
+          JWT_PAYLOAD=$(printf '{"iss":"%s","scope":"%s","aud":"%s","iat":%d,"exp":%d}' \
+            "$SA_EMAIL" "$SCOPE" "$TOKEN_URI" "$NOW" "$EXP" | b64url)
+
+          # 用私钥签名
+          JWT_SIGNATURE=$(printf '%s.%s' "$JWT_HEADER" "$JWT_PAYLOAD" | \
+            openssl dgst -sha256 -sign <(echo "$SA_KEY") | b64url)
+
+          JWT="${JWT_HEADER}.${JWT_PAYLOAD}.${JWT_SIGNATURE}"
+
+          # 用 JWT 换取 Access Token
+          TOKEN_RESPONSE=$(curl -s -f "$TOKEN_URI" \
+            -d "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \
+            -d "assertion=${JWT}")
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" = "null" ]; then
+            echo "::error::Failed to obtain access token"
+            echo "$TOKEN_RESPONSE"
+            exit 1
+          fi
+          echo "Access token obtained successfully"
+          echo "::endgroup::"
+
+          # 2. 上传扩展包
+          echo "::group::Uploading extension"
+          UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -X POST \
+            -T "${{ env.ZIP_NAME }}" \
+            "https://chromewebstore.googleapis.com/upload/v2/publishers/${CHROME_PUBLISHER_ID}/items/${CHROME_EXTENSION_ID}:upload")
+          UPLOAD_HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
+          UPLOAD_BODY=$(echo "$UPLOAD_RESPONSE" | sed '$d')
+          echo "Upload response (HTTP ${UPLOAD_HTTP_CODE}):"
+          echo "$UPLOAD_BODY" | jq . 2>/dev/null || echo "$UPLOAD_BODY"
+          if [ "$UPLOAD_HTTP_CODE" -lt 200 ] || [ "$UPLOAD_HTTP_CODE" -ge 300 ]; then
+            echo "::error::Upload failed with HTTP ${UPLOAD_HTTP_CODE}"
+            exit 1
+          fi
+          echo "::endgroup::"
+
+          # 3. 提交发布
+          echo "::group::Publishing extension"
+          PUBLISH_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -X POST \
+            "https://chromewebstore.googleapis.com/v2/publishers/${CHROME_PUBLISHER_ID}/items/${CHROME_EXTENSION_ID}:publish")
+          PUBLISH_HTTP_CODE=$(echo "$PUBLISH_RESPONSE" | tail -1)
+          PUBLISH_BODY=$(echo "$PUBLISH_RESPONSE" | sed '$d')
+          echo "Publish response (HTTP ${PUBLISH_HTTP_CODE}):"
+          echo "$PUBLISH_BODY" | jq . 2>/dev/null || echo "$PUBLISH_BODY"
+          if [ "$PUBLISH_HTTP_CODE" -lt 200 ] || [ "$PUBLISH_HTTP_CODE" -ge 300 ]; then
+            echo "::error::Publish failed with HTTP ${PUBLISH_HTTP_CODE}"
+            exit 1
+          fi
+          echo "Extension published successfully!"
+          echo "::endgroup::"
 
       # ==========================================
       # Edge Add-ons 自动发布
