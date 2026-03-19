@@ -16,7 +16,12 @@
       var data = null;
       var error = null;
       if (response.ok) {
-        data = await response.json();
+        // responseType: 'text' 返回文本，默认返回 JSON
+        if (detail.responseType === 'text') {
+          data = await response.text();
+        } else {
+          data = await response.json();
+        }
       } else {
         error = 'HTTP ' + response.status;
       }

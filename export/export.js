@@ -89,16 +89,31 @@
     const fetchFn = sourceType === 'column' ? api.fetchColumnPage : api.fetchCollectionPage;
     let nextPageUrl = collectionApiUrl;
     let pageNum = 0;
+    let totalFetched = 0;
 
     while (nextPageUrl) {
       pageNum++;
+      log(`正在请求第 ${pageNum} 页...`);
 
       let result;
       try {
         result = await fetchFn(nextPageUrl);
       } catch (err) {
         log(`加载第 ${pageNum} 页目录失败: ${err.message}`, 'error');
+        log(`已加载 ${totalFetched} 篇，后续页面未加载`, 'warn');
         return;
+      }
+
+      totalFetched += result.items.length;
+      log(`第 ${pageNum} 页返回 ${result.items.length} 篇（累计 ${totalFetched} 篇）`);
+
+      // 记录异常条目
+      for (const item of result.items) {
+        if (!item.id) {
+          log(`警告：发现无 ID 条目，标题="${item.title || '无'}"，类型=${item.type}，将跳过`, 'warn');
+        } else if (!item.html && item.type !== 'unknown') {
+          log(`注意：条目 ${item.id}（${item.title || '无标题'}）内容为空`, 'warn');
+        }
       }
 
       if (result.items.length > 0) {
@@ -106,6 +121,9 @@
       }
 
       nextPageUrl = result.nextUrl;
+      if (!nextPageUrl) {
+        log(`全部页面加载完成，共 ${pageNum} 页 ${totalFetched} 篇`);
+      }
     }
   }
 
@@ -487,70 +505,124 @@
       const exportedIds = new Set(progressData.articles.exportedIds || []);
       const usedNames = new Set();
       let exportedInBatch = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
       const allItems = []; // 收集所有条目供评论列表使用
 
       // 逐页拉取、逐页处理
       await fetchDirectoryPages(async (pageItems, pageNum) => {
         allItems.push(...pageItems);
 
+        // 过滤无 ID 条目
+        const noIdItems = pageItems.filter((item) => !item.id);
+        if (noIdItems.length > 0) {
+          skippedCount += noIdItems.length;
+        }
+
         // 过滤已导出的
         const pending = pageItems.filter((item) => item.id && !exportedIds.has(item.id));
+        const alreadyExported = pageItems.length - noIdItems.length - pending.length;
+
         if (pending.length === 0) {
-          log(`第 ${pageNum} 页全部已导出，跳过`);
+          log(`第 ${pageNum} 页：${pageItems.length} 篇全部已导出，跳过`);
           return;
         }
 
-        log(`第 ${pageNum} 页：${pageItems.length} 篇，待导出 ${pending.length} 篇`);
+        log(`第 ${pageNum} 页：${pageItems.length} 篇（待导出 ${pending.length}，已导出 ${alreadyExported}${noIdItems.length > 0 ? `，无ID跳过 ${noIdItems.length}` : ''}）`);
 
         for (const item of pending) {
-          exportedInBatch++;
-          const num = progressData.articles.totalExported + 1;
-          const typeLabel = u.TYPE_LABELS[item.type] || item.type;
-          let baseName = u.sanitizeFilename(buildItemName(item, typeLabel, num));
-          if (usedNames.has(baseName)) baseName = `${baseName}_${num}`;
-          usedNames.add(baseName);
+          const itemLabel = `${item.title || item.id}（${item.type}, id=${item.id}）`;
 
-          // 检查磁盘上是否已存在同名文件
-          let filename = `${baseName}.md`;
           try {
-            await articlesFolder.getFileHandle(filename);
-            filename = `${baseName}_${num}.md`;
-          } catch { /* 文件不存在，正常 */ }
+            exportedInBatch++;
+            const num = progressData.articles.totalExported + 1;
+            const typeLabel = u.TYPE_LABELS[item.type] || item.type;
+            let baseName = u.sanitizeFilename(buildItemName(item, typeLabel, num));
+            if (usedNames.has(baseName)) baseName = `${baseName}_${num}`;
+            usedNames.add(baseName);
 
-          showArticleProgress(0, 1,
-            `第 ${pageNum} 页 - 正在处理: ${(item.title || '').slice(0, 20)}...`);
-          log(`处理 [${exportedInBatch}]: ${item.title || baseName}`);
+            // 检查磁盘上是否已存在同名文件
+            let filename = `${baseName}.md`;
+            try {
+              await articlesFolder.getFileHandle(filename);
+              filename = `${baseName}_${num}.md`;
+              log(`文件名冲突，改用: ${filename}`, 'warn');
+            } catch { /* 文件不存在，正常 */ }
 
-          // 图片处理
-          let imageMapping = {};
-          if (wantImg && item.html) {
-            const imgUrls = extractImageUrls(item.html);
-            if (imgUrls.length > 0 && imagesFolder) {
-              const prefix = `${String(num).padStart(3, '0')}_`;
-              const imgResult = await u.batchDownloadImagesToFolder(imgUrls, prefix, imagesFolder);
-              imageMapping = imgResult.imageMapping;
+            showArticleProgress(0, 1,
+              `第 ${pageNum} 页 - 正在处理: ${(item.title || '').slice(0, 20)}...`);
+            log(`处理 [${exportedInBatch}]: ${itemLabel} → ${filename}`);
+
+            // 内容截断检测：content_need_truncated 表示列表 API 返回的内容不完整
+            if (item.isTruncated && (item.type === 'article' || item.type === 'answer')) {
+              let shouldFetch = true;
+
+              if (item.isPaidContent) {
+                // 付费内容：查询用户是否已购买
+                log(`  付费内容，检查购买状态...`);
+                const hasPaid = await api.checkPaidAccess(item.type, item.id);
+                if (hasPaid) {
+                  log(`  已购买，请求完整内容...`);
+                } else {
+                  log(`  未购买，跳过补全`, 'warn');
+                  shouldFetch = false;
+                }
+              } else {
+                log(`  内容被截断，请求完整内容...`);
+              }
+
+              if (shouldFetch) {
+                try {
+                  const fullHtml = await api.fetchFullContent(item.type, item.url);
+                  if (fullHtml && fullHtml.length > (item.html || '').length) {
+                    log(`  内容补全: ${(item.html || '').length} → ${fullHtml.length}`);
+                    item.html = fullHtml;
+                  }
+                } catch (err) {
+                  log(`  补全失败: ${err.message}，使用截断内容`, 'warn');
+                }
+              }
             }
+
+            // 图片处理
+            let imageMapping = {};
+            if (wantImg && item.html) {
+              const imgUrls = extractImageUrls(item.html);
+              if (imgUrls.length > 0 && imagesFolder) {
+                const prefix = `${String(num).padStart(3, '0')}_`;
+                const imgResult = await u.batchDownloadImagesToFolder(imgUrls, prefix, imagesFolder);
+                imageMapping = imgResult.imageMapping;
+                log(`  图片: ${imgUrls.length} 张，成功 ${Object.keys(imgResult.imageMapping).length} 张`);
+              }
+            }
+
+            // 转换 Markdown（始终生成 Front Matter）
+            let md = htmlToMarkdown(item.html || '', imageMapping);
+            md = u.buildFrontmatter(item) + md;
+
+            // 写入文件
+            await u.writeTextFile(articlesFolder, filename, md);
+
+            // 逐篇更新进度（中途中断也不丢）
+            await progress.addExportedArticle(dirHandle, collectionId, progressData, item.id);
+            exportedIds.add(item.id);
+          } catch (err) {
+            failedCount++;
+            log(`导出失败 [${itemLabel}]: ${err.message}`, 'error');
           }
-
-          // 转换 Markdown（始终生成 Front Matter）
-          let md = htmlToMarkdown(item.html || '', imageMapping);
-          md = u.buildFrontmatter(item) + md;
-
-          // 写入文件
-          await u.writeTextFile(articlesFolder, filename, md);
-
-          // 逐篇更新进度（中途中断也不丢）
-          await progress.addExportedArticle(dirHandle, collectionId, progressData, item.id);
-          exportedIds.add(item.id);
         }
       });
 
       cachedItems = allItems.length > 0 ? allItems : null;
 
-      // 更新 README
-      if (exportedInBatch > 0) {
+      // 汇总日志
+      const summary = [`导出完成：本次导出 ${exportedInBatch - failedCount} 篇，共已导出 ${progressData.articles.totalExported} 篇`];
+      if (failedCount > 0) summary.push(`失败 ${failedCount} 篇`);
+      if (skippedCount > 0) summary.push(`跳过无ID ${skippedCount} 篇`);
+
+      if (exportedInBatch > 0 || failedCount > 0) {
         await updateReadme(collectionFolder);
-        log(`导出完成：本次导出 ${exportedInBatch} 篇，共已导出 ${progressData.articles.totalExported} 篇`, 'success');
+        log(summary.join('，'), failedCount > 0 ? 'warn' : 'success');
       } else {
         log('没有需要导出的新内容', 'warn');
       }

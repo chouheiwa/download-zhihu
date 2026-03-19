@@ -21,10 +21,24 @@
     }
 
     const initialData = extractInitialData();
-    if (initialData) {
-      return extractFromInitialData(initialData, pageInfo, url);
+    const fromData = initialData ? extractFromInitialData(initialData, pageInfo, url) : null;
+    const fromDOM = extractFromDOM(pageInfo, url);
+
+    // 两个来源都有时，用 html 更长的那个（initialData 可能截断长文章）
+    if (fromData && fromDOM) {
+      const dataLen = (fromData.html || '').length;
+      const domLen = (fromDOM.html || '').length;
+      if (domLen > dataLen) {
+        fromDOM._source = `DOM(${domLen}) > initialData(${dataLen})`;
+        return fromDOM;
+      }
+      fromData._source = `initialData(${dataLen}) >= DOM(${domLen})`;
+      return fromData;
     }
-    return extractFromDOM(pageInfo, url);
+
+    if (fromData) { fromData._source = 'initialData'; return fromData; }
+    if (fromDOM) { fromDOM._source = 'DOM'; return fromDOM; }
+    return null;
   }
 
   function extractInitialData() {
@@ -189,7 +203,8 @@
 
   function getColumnInfo() {
     const url = window.location.href;
-    const match = url.match(/zhihu\.com\/column\/([^/?#]+)/);
+    const match = url.match(/zhihu\.com\/column\/([^/?#]+)/) ||
+                  url.match(/zhuanlan\.zhihu\.com\/([^/?#p][^/?#]*)/);
     if (!match) return null;
 
     const id = match[1];
@@ -261,12 +276,12 @@
     }
   });
 
-  function pageFetch(url) {
+  function pageFetch(url, responseType) {
     return new Promise((resolve, reject) => {
       const id = ++requestIdCounter;
       pendingRequests.set(id, { resolve, reject });
       window.dispatchEvent(new CustomEvent('__zhihu_dl_fetch_request', {
-        detail: { id, url }
+        detail: { id, url, responseType }
       }));
       // 超时 30 秒
       setTimeout(() => {
@@ -282,7 +297,7 @@
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action !== 'fetchProxy') return;
 
-    pageFetch(message.url)
+    pageFetch(message.url, message.responseType)
       .then((data) => sendResponse({ data }))
       .catch((err) => sendResponse({ error: err.message }));
 
