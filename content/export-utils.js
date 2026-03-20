@@ -147,6 +147,38 @@
     await writable.close();
   }
 
+  /**
+   * 将 Blob 写入文件夹（用于 docx 等二进制文件）
+   */
+  async function writeBlobFile(folderHandle, filename, blob) {
+    const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  }
+
+  /**
+   * 将 batchDownloadImages 的结果转换为 html-to-docx 需要的 imageData Map
+   * @param {Object} imageMapping - URL → 本地路径
+   * @param {Array} imageFiles - { path, buffer } 数组
+   * @returns {Map} URL → { buffer, ext }
+   */
+  function buildImageDataMap(imageMapping, imageFiles) {
+    const map = new Map();
+    const pathToBuffer = new Map();
+    for (const file of imageFiles) {
+      pathToBuffer.set(file.path, file.buffer);
+    }
+    for (const [url, path] of Object.entries(imageMapping)) {
+      const basename = path.split('/').pop();
+      const buffer = pathToBuffer.get(basename) || pathToBuffer.get(path);
+      if (buffer) {
+        map.set(url, { buffer, ext: path.split('.').pop() || 'jpg' });
+      }
+    }
+    return map;
+  }
+
   function collectCommentImageEntries(comments) {
     const entries = [];
     let commentIdx = 0;
@@ -212,6 +244,8 @@
     batchDownloadImages,
     batchDownloadImagesToFolder,
     writeTextFile,
+    writeBlobFile,
+    buildImageDataMap,
     collectCommentImageEntries,
     downloadCommentImages,
     buildTocMarkdown,

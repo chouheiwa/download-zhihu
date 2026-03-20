@@ -42,6 +42,9 @@
     commentProgressText: document.getElementById('comment-progress-text'),
     btnExportComments: document.getElementById('btn-export-comments'),
     logOutput: document.getElementById('log-output'),
+    formatSection: document.getElementById('format-section'),
+    docxImgOpts: document.getElementById('docx-img-opts'),
+    mdImgRow: document.getElementById('md-img-row'),
   };
 
   // ============================
@@ -175,6 +178,15 @@
     els.btnExportArticles.addEventListener('click', handleExportArticles);
     els.btnExportComments.addEventListener('click', handleExportComments);
 
+    // 格式切换
+    document.querySelectorAll('input[name="export-format"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const isDocx = document.querySelector('input[name="export-format"]:checked')?.value === 'docx';
+        if (els.docxImgOpts) els.docxImgOpts.style.display = isDocx ? '' : 'none';
+        if (els.mdImgRow) els.mdImgRow.style.display = isDocx ? 'none' : '';
+      });
+    });
+
     log(`已加载${sourceLabel}：${collectionName}（ID: ${collectionId}）`);
     updateUI();
   }
@@ -201,6 +213,7 @@
       await reconcileProgress();
 
       log(`已导出 ${progressData.articles.totalExported} 篇文章、${progressData.comments.totalExported} 篇评论`);
+      if (els.formatSection) els.formatSection.style.display = '';
       updateUI();
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -227,13 +240,16 @@
 
       for await (const [name, handle] of articlesFolder.entries()) {
         if (handle.kind !== 'file') continue;
-        if (!name.endsWith('.md')) continue;
-        if (name === 'README.md') continue;
+        if (!name.endsWith('.md') && !name.endsWith('.docx')) continue;
+        if (name === 'README.md' || name === 'README.docx') continue;
 
-        if (name.endsWith('-评论.md')) {
-          commentedFiles.add(name.replace(/-评论\.md$/, '.md'));
+        if (name.endsWith('-评论.md') || name.endsWith('-评论.docx')) {
+          commentedFiles.add(name.replace(/-评论\.(md|docx)$/, '.$1'));
           continue;
         }
+
+        // docx 文件无法从内容提取 ID，依赖进度文件记录
+        if (name.endsWith('.docx')) continue;
 
         // 读取 Front Matter 提取 ID
         try {
@@ -489,7 +505,9 @@
     isExportingArticles = true;
     updateUI();
 
-    const wantImg = els.optImg.checked;
+    const format = document.querySelector('input[name="export-format"]:checked')?.value || 'md';
+    const docxImgMode = document.querySelector('input[name="docx-img"]:checked')?.value || 'embed';
+    const wantImg = format === 'md' ? els.optImg.checked : (docxImgMode === 'embed');
 
     try {
       // 创建子文件夹
@@ -498,7 +516,7 @@
       );
       const articlesFolder = await collectionFolder.getDirectoryHandle('articles', { create: true });
       let imagesFolder = null;
-      if (wantImg) {
+      if (wantImg && format === 'md') {
         imagesFolder = await articlesFolder.getDirectoryHandle('images', { create: true });
       }
 
@@ -542,10 +560,10 @@
             usedNames.add(baseName);
 
             // 检查磁盘上是否已存在同名文件
-            let filename = `${baseName}.md`;
+            let filename = format === 'docx' ? `${baseName}.docx` : `${baseName}.md`;
             try {
               await articlesFolder.getFileHandle(filename);
-              filename = `${baseName}_${num}.md`;
+              filename = format === 'docx' ? `${baseName}_${num}.docx` : `${baseName}_${num}.md`;
               log(`文件名冲突，改用: ${filename}`, 'warn');
             } catch { /* 文件不存在，正常 */ }
 
@@ -584,24 +602,49 @@
               }
             }
 
-            // 图片处理
-            let imageMapping = {};
-            if (wantImg && item.html) {
-              const imgUrls = extractImageUrls(item.html);
-              if (imgUrls.length > 0 && imagesFolder) {
-                const prefix = `${String(num).padStart(3, '0')}_`;
-                const imgResult = await u.batchDownloadImagesToFolder(imgUrls, prefix, imagesFolder);
-                imageMapping = imgResult.imageMapping;
-                log(`  图片: ${imgUrls.length} 张，成功 ${Object.keys(imgResult.imageMapping).length} 张`);
+            if (format === 'docx') {
+              // === DOCX 模式 ===
+              let imageData = new Map();
+              if (wantImg && item.html) {
+                const imgUrls = extractImageUrls(item.html);
+                if (imgUrls.length > 0) {
+                  const prefix = `${String(num).padStart(3, '0')}_`;
+                  const imgResult = await u.batchDownloadImages(imgUrls, prefix, null);
+                  imageData = u.buildImageDataMap(imgResult.imageMapping, imgResult.imageFiles);
+                  log(`  图片: ${imgUrls.length} 张，嵌入 ${imageData.size} 张`);
+                }
               }
+
+              const docxBlob = await window.htmlToDocx(item.html || '', {
+                images: docxImgMode,
+                imageData,
+                frontMatter: {
+                  id: item.id,
+                  title: item.title,
+                  author: item.author?.name || item.author,
+                  url: item.url,
+                  date: new Date().toISOString().split('T')[0],
+                },
+              });
+
+              await u.writeBlobFile(articlesFolder, filename, docxBlob);
+            } else {
+              // === Markdown 模式（existing code） ===
+              let imageMapping = {};
+              if (wantImg && item.html) {
+                const imgUrls = extractImageUrls(item.html);
+                if (imgUrls.length > 0 && imagesFolder) {
+                  const prefix = `${String(num).padStart(3, '0')}_`;
+                  const imgResult = await u.batchDownloadImagesToFolder(imgUrls, prefix, imagesFolder);
+                  imageMapping = imgResult.imageMapping;
+                  log(`  图片: ${imgUrls.length} 张，成功 ${Object.keys(imgResult.imageMapping).length} 张`);
+                }
+              }
+
+              let md = htmlToMarkdown(item.html || '', imageMapping);
+              md = u.buildFrontmatter(item) + md;
+              await u.writeTextFile(articlesFolder, filename, md);
             }
-
-            // 转换 Markdown（始终生成 Front Matter）
-            let md = htmlToMarkdown(item.html || '', imageMapping);
-            md = u.buildFrontmatter(item) + md;
-
-            // 写入文件
-            await u.writeTextFile(articlesFolder, filename, md);
 
             // 逐篇更新进度（中途中断也不丢）
             await progress.addExportedArticle(dirHandle, collectionId, progressData, item.id);
@@ -647,8 +690,8 @@
       const fileNames = [];
       for await (const [name, handle] of articlesFolder.entries()) {
         if (handle.kind !== 'file') continue;
-        if (!name.endsWith('.md')) continue;
-        if (name.endsWith('-评论.md')) continue;
+        if (!name.endsWith('.md') && !name.endsWith('.docx')) continue;
+        if (name.endsWith('-评论.md') || name.endsWith('-评论.docx')) continue;
         fileNames.push(name);
       }
 
@@ -657,7 +700,7 @@
         num++;
         entries.push({
           num,
-          title: name.replace(/\.md$/, ''),
+          title: name.replace(/\.(md|docx)$/, ''),
           author: '',
           type: 'article',
           filename: name,
@@ -701,6 +744,8 @@
         imagesFolder = await articlesFolder.getDirectoryHandle('images');
       } catch { /* 没有 images 文件夹也没关系 */ }
 
+      const format = document.querySelector('input[name="export-format"]:checked')?.value || 'md';
+
       log(`开始导出 ${selected.length} 篇文章的评论`);
 
       for (let i = 0; i < selected.length; i++) {
@@ -739,12 +784,22 @@
             // 生成评论文件名（和文章文件名对应）
             const typeLabel = u.TYPE_LABELS[item.type] || item.type;
             const baseName = u.sanitizeFilename(buildItemName(item, typeLabel, 0));
-            const commentMd = buildCommentsMarkdown(comments, displayTitle, commentImageMapping);
-            const commentFilename = `${baseName}-评论.md`;
-            await u.writeTextFile(articlesFolder, commentFilename, commentMd);
 
-            const totalComments = comments.reduce((sum, c) => sum + 1 + (c.child_comments || []).length, 0);
-            log(`已导出 ${totalComments} 条评论: ${commentFilename}`, 'success');
+            if (format === 'docx') {
+              const commentBlob = await window.commentsToDocx(comments, displayTitle);
+              const commentFilename = `${baseName}-评论.docx`;
+              await u.writeBlobFile(articlesFolder, commentFilename, commentBlob);
+
+              const totalComments = comments.reduce((sum, c) => sum + 1 + (c.child_comments || []).length, 0);
+              log(`已导出 ${totalComments} 条评论: ${commentFilename}`, 'success');
+            } else {
+              const commentMd = buildCommentsMarkdown(comments, displayTitle, commentImageMapping);
+              const commentFilename = `${baseName}-评论.md`;
+              await u.writeTextFile(articlesFolder, commentFilename, commentMd);
+
+              const totalComments = comments.reduce((sum, c) => sum + 1 + (c.child_comments || []).length, 0);
+              log(`已导出 ${totalComments} 条评论: ${commentFilename}`, 'success');
+            }
           } else {
             log(`${displayTitle}：无评论`);
           }

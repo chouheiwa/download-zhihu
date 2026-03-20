@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "知乎文章下载器",
-  "description": "将知乎文章、回答、问题、想法、收藏夹导出为 Markdown 文件",
-  "version": "2.0.2",
-  "permissions": ["activeTab", "storage", "unlimitedStorage"],
+  "description": "将知乎文章、回答、问题、想法、收藏夹导出为 Markdown 或 Word (.docx) 文件",
+  "version": "2.1.0",
+  "permissions": ["activeTab", "storage", "unlimitedStorage", "scripting"],
   "host_permissions": [
     "https://www.zhihu.com/*",
     "https://zhuanlan.zhihu.com/*"
@@ -39,7 +39,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon48.png", "content/fetch-bridge.js"],
+      "resources": ["icons/icon48.png", "content/fetch-bridge.js", "lib/docx.min.js", "lib/temml.min.js", "lib/mathml2omml.min.js", "lib/html-to-docx.js"],
       "matches": ["https://www.zhihu.com/*", "https://zhuanlan.zhihu.com/*"]
     }
   ]

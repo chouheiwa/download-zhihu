@@ -97,14 +97,24 @@
         <span class="info-value">${data.html ? data.html.length + ' 字符' : '<span style="color:#e53e3e">空</span>'}</span>
       </div>
       <div class="options">
+        <div class="option-item" style="display:flex;gap:12px;align-items:center;">
+          <span>导出格式</span>
+          <label><input type="radio" name="export-format" value="md" checked> Markdown</label>
+          <label><input type="radio" name="export-format" value="docx"> Word</label>
+        </div>
         <label class="option-item">
           <span>包含 Front Matter</span>
           <input type="checkbox" id="opt-fm" checked>
         </label>
-        <label class="option-item">
+        <label class="option-item" id="opt-img-row">
           <span>下载图片到本地</span>
           <input type="checkbox" id="opt-img" ${imgUrls.length > 0 ? 'checked' : ''}>
         </label>
+        <div class="option-item" id="docx-img-opts" style="display:none;gap:12px;align-items:center;">
+          <span>图片处理</span>
+          <label><input type="radio" name="docx-img" value="embed" checked> 嵌入文档</label>
+          <label><input type="radio" name="docx-img" value="link"> 外部链接</label>
+        </div>
         <label class="option-item">
           <span>导出评论区</span>
           <input type="checkbox" id="opt-comment">
@@ -136,10 +146,13 @@
       optFm: body.querySelector('#opt-fm'),
       optImg: body.querySelector('#opt-img'),
       optComment: body.querySelector('#opt-comment'),
+      optImgRow: body.querySelector('#opt-img-row'),
+      docxImgOpts: body.querySelector('#docx-img-opts'),
       progressWrap: body.querySelector('#progress-wrap'),
       progressBar: body.querySelector('#progress-bar'),
       progressLabel: body.querySelector('#progress-label'),
       logEl: body.querySelector('#article-log'),
+      panelBody: body,
     };
 
     // 文件夹 handle 状态
@@ -180,20 +193,36 @@
     refs.btnSaveFolder.addEventListener('click', () => handleSaveToFolder(data, imgUrls, refs, currentDirHandle, pickFolder));
 
     function updateBtnText() {
-      const wantImg = refs.optImg.checked && imgUrls.length > 0;
+      const format = body.querySelector('input[name="export-format"]:checked')?.value || 'md';
       const wantComment = refs.optComment.checked;
-      if (wantImg && wantComment) {
-        refs.btn.textContent = '下载 ZIP（含图片和评论）';
-      } else if (wantImg) {
-        refs.btn.textContent = `下载 ZIP（含 ${imgUrls.length} 张图片）`;
-      } else if (wantComment) {
-        refs.btn.textContent = '下载 ZIP（含评论）';
+
+      if (format === 'docx') {
+        refs.btn.textContent = wantComment ? '下载 ZIP（含评论）' : '下载 Word';
       } else {
-        refs.btn.textContent = '下载 Markdown';
+        const wantImg = refs.optImg.checked && imgUrls.length > 0;
+        if (wantImg && wantComment) {
+          refs.btn.textContent = '下载 ZIP（含图片和评论）';
+        } else if (wantImg) {
+          refs.btn.textContent = `下载 ZIP（含 ${imgUrls.length} 张图片）`;
+        } else if (wantComment) {
+          refs.btn.textContent = '下载 ZIP（含评论）';
+        } else {
+          refs.btn.textContent = '下载 Markdown';
+        }
       }
     }
     refs.optImg.addEventListener('change', updateBtnText);
     refs.optComment.addEventListener('change', updateBtnText);
+
+    // 格式切换
+    body.querySelectorAll('input[name="export-format"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const isDocx = body.querySelector('input[name="export-format"]:checked')?.value === 'docx';
+        refs.optImgRow.style.display = isDocx ? 'none' : '';
+        refs.docxImgOpts.style.display = isDocx ? 'flex' : 'none';
+        updateBtnText();
+      });
+    });
 
     refs.btn.addEventListener('click', () => handleArticleDownload(data, imgUrls, refs, updateBtnText));
 
@@ -221,6 +250,8 @@
   async function handleArticleDownload(data, imgUrls, refs, updateBtnText) {
     refs.btn.disabled = true;
 
+    const format = refs.panelBody.querySelector('input[name="export-format"]:checked')?.value || 'md';
+    const docxImgMode = refs.panelBody.querySelector('input[name="docx-img"]:checked')?.value || 'embed';
     const wantImages = refs.optImg.checked && imgUrls.length > 0;
     const wantFm = refs.optFm.checked;
     const wantComment = refs.optComment.checked;
@@ -245,81 +276,146 @@
     }
 
     try {
-      let imageMapping = {};
-      let imageFiles = [];
+      if (format === 'md') {
+        // === EXISTING MARKDOWN LOGIC (unchanged) ===
+        let imageMapping = {};
+        let imageFiles = [];
 
-      if (wantImages) {
-        refs.btn.textContent = '正在下载图片...';
-        articleLog(refs, `开始下载 ${imgUrls.length} 张图片...`);
-        const result = await u.batchDownloadImages(imgUrls, '', (done, total) => {
-          u.showProgress(refs, done, total, `正在下载图片 ${done}/${total}`);
-        });
-        imageMapping = result.imageMapping;
-        imageFiles = result.imageFiles;
-        const successCount = Object.keys(imageMapping).length;
-        const failCount = imgUrls.length - successCount;
-        articleLog(refs, `图片下载完成: 成功 ${successCount}, 失败 ${failCount}${failCount > 0 ? '' : ''}`, failCount > 0 ? 'warn' : 'info');
-      }
-
-      articleLog(refs, '正在转换 Markdown...');
-      u.showProgress(refs, 1, 1, '正在生成 Markdown...');
-      let md = htmlToMarkdown(data.html, imageMapping);
-      const mdTextLen = md.length;
-      if (wantFm) md = u.buildFrontmatter(data) + md;
-      articleLog(refs, `Markdown 生成完成: ${mdTextLen} 字符（含FM: ${md.length}）`);
-      if (plainTextLen > 0 && mdTextLen < plainTextLen * 0.5) {
-        articleLog(refs, `警告：Markdown(${mdTextLen}) 远小于纯文本(${plainTextLen})，可能有内容丢失`, 'warn');
-      }
-
-      let commentMd = '';
-      let commentImageFiles = [];
-
-      if (wantComment) {
-        refs.btn.textContent = '正在加载评论...';
-        const pageInfo = api.detectPage(window.location.href);
-        articleLog(refs, `加载评论: type=${pageInfo.type}, id=${pageInfo.id}`);
-        const comments = await api.fetchAllComments(pageInfo.type, pageInfo.id, (done, total) => {
-          u.showProgress(refs, done, total, `正在加载子评论 ${done}/${total}...`);
-        });
-        articleLog(refs, `评论加载完成: ${comments.length} 条根评论`);
-
-        let commentImageMapping = {};
-        if (wantImages && comments.length > 0) {
-          const imgEntries = u.collectCommentImageEntries(comments);
-          articleLog(refs, `评论图片: ${imgEntries.length} 张`);
-          const imgResult = await u.downloadCommentImages(imgEntries, 'comment_');
-          commentImageMapping = imgResult.imageMapping;
-          commentImageFiles = imgResult.imageFiles;
+        if (wantImages) {
+          refs.btn.textContent = '正在下载图片...';
+          articleLog(refs, `开始下载 ${imgUrls.length} 张图片...`);
+          const result = await u.batchDownloadImages(imgUrls, '', (done, total) => {
+            u.showProgress(refs, done, total, `正在下载图片 ${done}/${total}`);
+          });
+          imageMapping = result.imageMapping;
+          imageFiles = result.imageFiles;
+          const successCount = Object.keys(imageMapping).length;
+          const failCount = imgUrls.length - successCount;
+          articleLog(refs, `图片下载完成: 成功 ${successCount}, 失败 ${failCount}${failCount > 0 ? '' : ''}`, failCount > 0 ? 'warn' : 'info');
         }
 
-        u.showProgress(refs, 1, 1, '正在生成评论 Markdown...');
-        commentMd = buildCommentsMarkdown(comments, data.title, commentImageMapping);
-
-        const encodedCommentFile = encodeURIComponent(commentFileName).replace(/\(/g, '%28').replace(/\)/g, '%29');
-        md += `\n\n---\n\n> [查看评论区](./${encodedCommentFile})\n`;
-      }
-
-      if (needZip) {
-        u.showProgress(refs, 1, 1, '正在打包 ZIP...');
-        articleLog(refs, `打包 ZIP: 文章=${baseName}.md${wantComment ? ', 评论=' + commentFileName : ''}, 图片=${imageFiles.length + commentImageFiles.length} 张`);
-        const zip = new JSZip();
-        zip.file(`${baseName}.md`, md);
-        if (wantComment) zip.file(commentFileName, commentMd);
-        if (wantImages || commentImageFiles.length > 0) {
-          const imagesFolder = zip.folder('images');
-          for (const f of imageFiles) imagesFolder.file(f.path, f.buffer);
-          for (const f of commentImageFiles) imagesFolder.file(f.path, f.buffer);
+        articleLog(refs, '正在转换 Markdown...');
+        u.showProgress(refs, 1, 1, '正在生成 Markdown...');
+        let md = htmlToMarkdown(data.html, imageMapping);
+        const mdTextLen = md.length;
+        if (wantFm) md = u.buildFrontmatter(data) + md;
+        articleLog(refs, `Markdown 生成完成: ${mdTextLen} 字符（含FM: ${md.length}）`);
+        if (plainTextLen > 0 && mdTextLen < plainTextLen * 0.5) {
+          articleLog(refs, `警告：Markdown(${mdTextLen}) 远小于纯文本(${plainTextLen})，可能有内容丢失`, 'warn');
         }
-        const blob = await zip.generateAsync(
-          { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
-          (meta) => u.showProgress(refs, 1, 1, `正在压缩... ${Math.round(meta.percent)}%`)
-        );
-        articleLog(refs, `ZIP 生成完成: ${(blob.size / 1024).toFixed(1)} KB`);
-        u.triggerDownload(blob, `${baseName}.zip`);
+
+        let commentMd = '';
+        let commentImageFiles = [];
+
+        if (wantComment) {
+          refs.btn.textContent = '正在加载评论...';
+          const pageInfo = api.detectPage(window.location.href);
+          articleLog(refs, `加载评论: type=${pageInfo.type}, id=${pageInfo.id}`);
+          const comments = await api.fetchAllComments(pageInfo.type, pageInfo.id, (done, total) => {
+            u.showProgress(refs, done, total, `正在加载子评论 ${done}/${total}...`);
+          });
+          articleLog(refs, `评论加载完成: ${comments.length} 条根评论`);
+
+          let commentImageMapping = {};
+          if (wantImages && comments.length > 0) {
+            const imgEntries = u.collectCommentImageEntries(comments);
+            articleLog(refs, `评论图片: ${imgEntries.length} 张`);
+            const imgResult = await u.downloadCommentImages(imgEntries, 'comment_');
+            commentImageMapping = imgResult.imageMapping;
+            commentImageFiles = imgResult.imageFiles;
+          }
+
+          u.showProgress(refs, 1, 1, '正在生成评论 Markdown...');
+          commentMd = buildCommentsMarkdown(comments, data.title, commentImageMapping);
+
+          const encodedCommentFile = encodeURIComponent(commentFileName).replace(/\(/g, '%28').replace(/\)/g, '%29');
+          md += `\n\n---\n\n> [查看评论区](./${encodedCommentFile})\n`;
+        }
+
+        if (needZip) {
+          u.showProgress(refs, 1, 1, '正在打包 ZIP...');
+          articleLog(refs, `打包 ZIP: 文章=${baseName}.md${wantComment ? ', 评论=' + commentFileName : ''}, 图片=${imageFiles.length + commentImageFiles.length} 张`);
+          const zip = new JSZip();
+          zip.file(`${baseName}.md`, md);
+          if (wantComment) zip.file(commentFileName, commentMd);
+          if (wantImages || commentImageFiles.length > 0) {
+            const imagesFolder = zip.folder('images');
+            for (const f of imageFiles) imagesFolder.file(f.path, f.buffer);
+            for (const f of commentImageFiles) imagesFolder.file(f.path, f.buffer);
+          }
+          const blob = await zip.generateAsync(
+            { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+            (meta) => u.showProgress(refs, 1, 1, `正在压缩... ${Math.round(meta.percent)}%`)
+          );
+          articleLog(refs, `ZIP 生成完成: ${(blob.size / 1024).toFixed(1)} KB`);
+          u.triggerDownload(blob, `${baseName}.zip`);
+        } else {
+          const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+          articleLog(refs, `MD 文件: ${(blob.size / 1024).toFixed(1)} KB`);
+          u.triggerDownload(blob, `${baseName}.md`);
+        }
       } else {
-        const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-        articleLog(refs, `MD 文件: ${(blob.size / 1024).toFixed(1)} KB`);
-        u.triggerDownload(blob, `${baseName}.md`);
+        // === DOCX 导出 ===
+        if (typeof window.htmlToDocx !== 'function') {
+          articleLog(refs, '正在加载 Word 导出库...', 'info');
+          const resp = await chrome.runtime.sendMessage({ action: 'injectDocxLibs' });
+          if (!resp?.success) {
+            throw new Error('无法加载 Word 导出库: ' + (resp?.error || '未知错误'));
+          }
+        }
+
+        let imageData = new Map();
+        if (docxImgMode === 'embed' && imgUrls.length > 0) {
+          refs.btn.textContent = '正在下载图片...';
+          articleLog(refs, `开始下载 ${imgUrls.length} 张图片...`);
+          const result = await u.batchDownloadImages(imgUrls, '', (done, total) => {
+            u.showProgress(refs, done, total, `正在下载图片 ${done}/${total}`);
+          });
+          imageData = u.buildImageDataMap(result.imageMapping, result.imageFiles);
+          articleLog(refs, `图片下载完成: ${imageData.size} 张`);
+        }
+
+        articleLog(refs, '正在生成 Word 文档...', 'info');
+        u.showProgress(refs, 1, 1, '正在生成 Word 文档...');
+        const frontMatter = refs.optFm.checked
+          ? { id: data.id, title: data.title, author: data.author, url: data.url, date: new Date().toISOString().split('T')[0] }
+          : null;
+        const docxBlob = await window.htmlToDocx(data.html, {
+          images: docxImgMode,
+          imageData,
+          frontMatter,
+        });
+        articleLog(refs, `Word 文档生成完成: ${(docxBlob.size / 1024).toFixed(1)} KB`);
+
+        const baseName = u.sanitizeFilename(
+          `${data.title}-${data.author}的${u.TYPE_LABELS[data.type] || data.type}`
+        );
+
+        if (wantComment) {
+          refs.btn.textContent = '正在加载评论...';
+          const pageInfo = api.detectPage(window.location.href);
+          articleLog(refs, `加载评论: type=${pageInfo.type}, id=${pageInfo.id}`);
+          const comments = await api.fetchAllComments(pageInfo.type, pageInfo.id, (done, total) => {
+            u.showProgress(refs, done, total, `正在加载子评论 ${done}/${total}...`);
+          });
+          articleLog(refs, `评论加载完成: ${comments.length} 条根评论`);
+
+          u.showProgress(refs, 1, 1, '正在生成评论文档...');
+          const commentBlob = await window.commentsToDocx(comments, data.title);
+
+          u.showProgress(refs, 1, 1, '正在打包 ZIP...');
+          const zip = new JSZip();
+          zip.file(`${baseName}.docx`, docxBlob);
+          zip.file(`${baseName}-评论.docx`, commentBlob);
+          const zipBlob = await zip.generateAsync(
+            { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+            (meta) => u.showProgress(refs, 1, 1, `正在压缩... ${Math.round(meta.percent)}%`)
+          );
+          articleLog(refs, `ZIP 生成完成: ${(zipBlob.size / 1024).toFixed(1)} KB`);
+          u.triggerDownload(zipBlob, `${baseName}.zip`);
+        } else {
+          u.triggerDownload(docxBlob, `${baseName}.docx`);
+        }
       }
 
       articleLog(refs, '下载成功 ✓');
@@ -354,6 +450,8 @@
     refs.btn.disabled = true;
     refs.btnSaveFolder.disabled = true;
 
+    const format = refs.panelBody.querySelector('input[name="export-format"]:checked')?.value || 'md';
+    const docxImgMode = refs.panelBody.querySelector('input[name="docx-img"]:checked')?.value || 'embed';
     const wantImages = refs.optImg.checked && imgUrls.length > 0;
     const wantFm = refs.optFm.checked;
     const wantComment = refs.optComment.checked;
@@ -365,63 +463,112 @@
     articleLog(refs, `开始保存到文件夹: ${dirHandle.name}`);
 
     try {
-      let imageMapping = {};
+      if (format === 'md') {
+        // === EXISTING MARKDOWN LOGIC (unchanged) ===
+        let imageMapping = {};
 
-      if (wantImages) {
-        refs.btnSaveFolder.textContent = '正在下载图片...';
-        articleLog(refs, `开始下载 ${imgUrls.length} 张图片到文件夹...`);
-        const imagesFolderHandle = await dirHandle.getDirectoryHandle('images', { create: true });
-        const result = await u.batchDownloadImagesToFolder(imgUrls, '', imagesFolderHandle);
-        imageMapping = result.imageMapping;
-        articleLog(refs, `图片保存完成: ${Object.keys(imageMapping).length} 张`);
-      }
+        if (wantImages) {
+          refs.btnSaveFolder.textContent = '正在下载图片...';
+          articleLog(refs, `开始下载 ${imgUrls.length} 张图片到文件夹...`);
+          const imagesFolderHandle = await dirHandle.getDirectoryHandle('images', { create: true });
+          const result = await u.batchDownloadImagesToFolder(imgUrls, '', imagesFolderHandle);
+          imageMapping = result.imageMapping;
+          articleLog(refs, `图片保存完成: ${Object.keys(imageMapping).length} 张`);
+        }
 
-      articleLog(refs, '正在转换 Markdown...');
-      refs.btnSaveFolder.textContent = '正在生成 Markdown...';
-      let md = htmlToMarkdown(data.html, imageMapping);
-      if (wantFm) md = u.buildFrontmatter(data) + md;
+        articleLog(refs, '正在转换 Markdown...');
+        refs.btnSaveFolder.textContent = '正在生成 Markdown...';
+        let md = htmlToMarkdown(data.html, imageMapping);
+        if (wantFm) md = u.buildFrontmatter(data) + md;
 
-      if (wantComment) {
-        refs.btnSaveFolder.textContent = '正在加载评论...';
-        const pageInfo = api.detectPage(window.location.href);
-        const comments = await api.fetchAllComments(pageInfo.type, pageInfo.id, (done, total) => {
-          u.showProgress(refs, done, total, `正在加载子评论 ${done}/${total}...`);
-        });
-        articleLog(refs, `评论加载完成: ${comments.length} 条根评论`);
+        if (wantComment) {
+          refs.btnSaveFolder.textContent = '正在加载评论...';
+          const pageInfo = api.detectPage(window.location.href);
+          const comments = await api.fetchAllComments(pageInfo.type, pageInfo.id, (done, total) => {
+            u.showProgress(refs, done, total, `正在加载子评论 ${done}/${total}...`);
+          });
+          articleLog(refs, `评论加载完成: ${comments.length} 条根评论`);
 
-        let commentImageMapping = {};
-        if (wantImages && comments.length > 0) {
-          const imgEntries = u.collectCommentImageEntries(comments);
-          if (imgEntries.length > 0) {
-            const imagesFolderHandle = await dirHandle.getDirectoryHandle('images', { create: true });
-            // 下载评论图片到文件夹
-            for (const entry of imgEntries) {
-              for (let i = 0; i < entry.urls.length; i++) {
-                const url = entry.urls[i];
-                const result = await u.downloadImage(url);
-                if (result) {
-                  const filename = `comment_${String(entry.commentIdx).padStart(3, '0')}_${String(i + 1).padStart(3, '0')}${result.ext}`;
-                  commentImageMapping[url] = `images/${filename}`;
-                  const fh = await imagesFolderHandle.getFileHandle(filename, { create: true });
-                  const w = await fh.createWritable();
-                  await w.write(result.buffer);
-                  await w.close();
+          let commentImageMapping = {};
+          if (wantImages && comments.length > 0) {
+            const imgEntries = u.collectCommentImageEntries(comments);
+            if (imgEntries.length > 0) {
+              const imagesFolderHandle = await dirHandle.getDirectoryHandle('images', { create: true });
+              // 下载评论图片到文件夹
+              for (const entry of imgEntries) {
+                for (let i = 0; i < entry.urls.length; i++) {
+                  const url = entry.urls[i];
+                  const result = await u.downloadImage(url);
+                  if (result) {
+                    const filename = `comment_${String(entry.commentIdx).padStart(3, '0')}_${String(i + 1).padStart(3, '0')}${result.ext}`;
+                    commentImageMapping[url] = `images/${filename}`;
+                    const fh = await imagesFolderHandle.getFileHandle(filename, { create: true });
+                    const w = await fh.createWritable();
+                    await w.write(result.buffer);
+                    await w.close();
+                  }
                 }
               }
             }
           }
+
+          const commentMd = buildCommentsMarkdown(comments, data.title, commentImageMapping);
+          await u.writeTextFile(dirHandle, commentFileName, commentMd);
+          articleLog(refs, `评论已保存: ${commentFileName}`);
+
+          const encodedCommentFile = encodeURIComponent(commentFileName).replace(/\(/g, '%28').replace(/\)/g, '%29');
+          md += `\n\n---\n\n> [查看评论区](./${encodedCommentFile})\n`;
         }
 
-        const commentMd = buildCommentsMarkdown(comments, data.title, commentImageMapping);
-        await u.writeTextFile(dirHandle, commentFileName, commentMd);
-        articleLog(refs, `评论已保存: ${commentFileName}`);
+        await u.writeTextFile(dirHandle, `${baseName}.md`, md);
+        articleLog(refs, `文章已保存: ${baseName}.md`);
+      } else {
+        // === DOCX 保存到文件夹 ===
+        if (typeof window.htmlToDocx !== 'function') {
+          articleLog(refs, '正在加载 Word 导出库...', 'info');
+          const resp = await chrome.runtime.sendMessage({ action: 'injectDocxLibs' });
+          if (!resp?.success) throw new Error('无法加载 Word 导出库: ' + (resp?.error || '未知错误'));
+        }
 
-        const encodedCommentFile = encodeURIComponent(commentFileName).replace(/\(/g, '%28').replace(/\)/g, '%29');
-        md += `\n\n---\n\n> [查看评论区](./${encodedCommentFile})\n`;
+        let imageData = new Map();
+        if (docxImgMode === 'embed' && imgUrls.length > 0) {
+          refs.btnSaveFolder.textContent = '正在下载图片...';
+          articleLog(refs, `开始下载 ${imgUrls.length} 张图片...`);
+          const result = await u.batchDownloadImages(imgUrls, '', (done, total) => {
+            u.showProgress(refs, done, total, `正在下载图片 ${done}/${total}`);
+          });
+          imageData = u.buildImageDataMap(result.imageMapping, result.imageFiles);
+          articleLog(refs, `图片下载完成: ${imageData.size} 张`);
+        }
+
+        articleLog(refs, '正在生成 Word 文档...');
+        refs.btnSaveFolder.textContent = '正在生成 Word 文档...';
+        const frontMatter = refs.optFm.checked
+          ? { id: data.id, title: data.title, author: data.author, url: data.url, date: new Date().toISOString().split('T')[0] }
+          : null;
+        const docxBlob = await window.htmlToDocx(data.html, {
+          images: docxImgMode,
+          imageData,
+          frontMatter,
+        });
+
+        if (wantComment) {
+          refs.btnSaveFolder.textContent = '正在加载评论...';
+          const pageInfo = api.detectPage(window.location.href);
+          const comments = await api.fetchAllComments(pageInfo.type, pageInfo.id, (done, total) => {
+            u.showProgress(refs, done, total, `正在加载子评论 ${done}/${total}...`);
+          });
+          articleLog(refs, `评论加载完成: ${comments.length} 条根评论`);
+
+          const commentBlob = await window.commentsToDocx(comments, data.title);
+          await u.writeBlobFile(dirHandle, `${baseName}-评论.docx`, commentBlob);
+          articleLog(refs, `评论已保存: ${baseName}-评论.docx`);
+        }
+
+        await u.writeBlobFile(dirHandle, `${baseName}.docx`, docxBlob);
+        articleLog(refs, `文章已保存: ${baseName}.docx`);
       }
 
-      await u.writeTextFile(dirHandle, `${baseName}.md`, md);
-      articleLog(refs, `文章已保存: ${baseName}.md`);
       articleLog(refs, '保存成功 ✓');
 
       refs.btnSaveFolder.textContent = '保存成功 ✓';

@@ -47,6 +47,19 @@
         </div>
       </section>
 
+      <!-- 格式选择 -->
+      <section id="format-section" style="display:none;">
+        <h2>导出格式</h2>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:8px;">
+          <label><input type="radio" name="export-format" value="md" checked> Markdown</label>
+          <label><input type="radio" name="export-format" value="docx"> Word (.docx)</label>
+        </div>
+        <div id="docx-img-opts" style="display:none;">
+          <label><input type="radio" name="docx-img" value="embed" checked> 嵌入图片到文档</label>
+          <label style="margin-left:12px;"><input type="radio" name="docx-img" value="link"> 图片使用外部链接</label>
+        </div>
+      </section>
+
       <!-- 两栏导出区 -->
       <div class="export-grid">
         <!-- 文章导出 -->
@@ -60,7 +73,7 @@
             <p class="status-empty">请先选择导出文件夹</p>
           </div>
 
-          <div class="option-row">
+          <div id="md-img-row" class="option-row">
             <label class="check-label">
               <input type="checkbox" id="opt-img" checked class="check-input">
               <span class="check-box"><span class="check-tick">&#x2713;</span></span>
@@ -144,6 +157,10 @@
   <!-- 共享模块 -->
   <script src="../lib/turndown.js"></script>
   <script src="../lib/html-to-markdown.js"></script>
+    <script src="../lib/docx.min.js"></script>
+    <script src="../lib/temml.min.js"></script>
+    <script src="../lib/mathml2omml.min.js"></script>
+    <script src="../lib/html-to-docx.js"></script>
   <script src="../lib/throttle.js"></script>
   <script src="../lib/zhihu-api.js"></script>
   <script src="../lib/progress.js"></script>

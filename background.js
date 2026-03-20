@@ -10,6 +10,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.action === 'injectDocxLibs') {
+    (async () => {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: sender.tab.id },
+          files: ['lib/docx.min.js', 'lib/temml.min.js', 'lib/mathml2omml.min.js', 'lib/html-to-docx.js'],
+        });
+        sendResponse({ success: true });
+      } catch (e) {
+        sendResponse({ success: false, error: e.message });
+      }
+    })();
+    return true;
+  }
+
   // Extension Page 请求代理
   if (message.action === 'proxyFetch') {
     if (message.responseType === 'text') {
