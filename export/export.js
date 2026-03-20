@@ -400,10 +400,8 @@
       checkbox.type = 'checkbox';
       checkbox.className = 'check-input';
       checkbox.value = item.id;
-      checkbox.disabled = isDone || isExportingComments;
-      if (!isDone) {
-        checkbox.checked = false;
-      }
+      checkbox.disabled = isExportingComments;
+      checkbox.checked = false;
 
       const checkBox = document.createElement('span');
       checkBox.className = 'check-box';
@@ -434,7 +432,7 @@
       const meta = document.createElement('span');
       meta.className = 'list-item-meta';
       const commentInfo = item.commentCount ? `${item.commentCount} 条` : '无';
-      meta.textContent = isDone ? '已导出' : commentInfo;
+      meta.textContent = isDone ? '已导出 · 可更新' : commentInfo;
 
       entry.appendChild(checkbox);
       entry.appendChild(checkBox);
@@ -445,9 +443,7 @@
       entry.appendChild(meta);
       listItems.appendChild(entry);
 
-      if (!isDone) {
-        articleEntries.push({ checkbox, item });
-      }
+      articleEntries.push({ checkbox, item });
     }
 
     // 更新选中计数

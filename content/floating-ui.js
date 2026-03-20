@@ -276,6 +276,14 @@
     body.className = 'panel-body';
     panel.appendChild(body);
 
+    // 检测扩展是否已更新（content script 与扩展版本不匹配）
+    if (!chrome.runtime?.id) {
+      body.innerHTML = '<div class="status-msg" style="color:#e67e22;">插件已更新，请刷新页面后使用<br><button style="margin-top:10px;padding:6px 16px;border:none;border-radius:6px;background:#0066ff;color:#fff;cursor:pointer;font-size:13px;" id="__zhihu_dl_reload">刷新页面</button></div>';
+      shadow.appendChild(panel);
+      body.querySelector('#__zhihu_dl_reload').addEventListener('click', () => location.reload());
+      return;
+    }
+
     if (!pageInfo) {
       body.innerHTML = '<div class="status-msg">当前页面不是可导出的知乎内容<br><span style="font-size:12px;color:#aaa;">支持：文章、回答、问题、想法、收藏夹、专栏</span></div>';
       shadow.appendChild(panel);
