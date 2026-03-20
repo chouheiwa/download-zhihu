@@ -237,6 +237,7 @@
       // 扫描实际文件，从 Front Matter 提取 ID 重建 exportedIds
       const foundIds = new Set();
       const commentedFiles = new Set();
+      const fileItems = []; // 从文件 Front Matter 恢复的文章元数据
 
       for await (const [name, handle] of articlesFolder.entries()) {
         if (handle.kind !== 'file') continue;
@@ -251,25 +252,46 @@
         // docx 文件无法从内容提取 ID，依赖进度文件记录
         if (name.endsWith('.docx')) continue;
 
-        // 读取 Front Matter 提取 ID
+        // 读取 Front Matter 提取 ID 和元数据
         try {
           const file = await handle.getFile();
           const head = await file.slice(0, 500).text();
           // 优先直接读 id 字段
           const idMatch = head.match(/^id:\s*"([^"]+)"/m);
+          let articleId = null;
           if (idMatch && idMatch[1]) {
-            foundIds.add(idMatch[1]);
+            articleId = idMatch[1];
           } else {
             // 兼容旧文件：从 source URL 解析
             const sourceMatch = head.match(/^source:\s*"([^"]+)"/m);
             if (sourceMatch) {
               const pageInfo = api.detectPage(sourceMatch[1]);
               if (pageInfo && pageInfo.id) {
-                foundIds.add(pageInfo.id);
+                articleId = pageInfo.id;
               }
             }
           }
+          if (articleId) {
+            foundIds.add(articleId);
+            // 提取元数据供评论列表使用
+            const titleMatch = head.match(/^title:\s*"(.+)"/m);
+            const authorMatch = head.match(/^author:\s*"(.+)"/m);
+            const typeMatch = head.match(/^type:\s*zhihu-(\S+)/m);
+            const sourceMatch = head.match(/^source:\s*"([^"]+)"/m);
+            fileItems.push({
+              id: articleId,
+              title: titleMatch ? titleMatch[1].replace(/\\"/g, '"') : '',
+              author: authorMatch ? authorMatch[1].replace(/\\"/g, '"') : '',
+              type: typeMatch ? typeMatch[1] : 'article',
+              url: sourceMatch ? sourceMatch[1] : '',
+            });
+          }
         } catch { /* 读取失败跳过 */ }
+      }
+
+      // 当 cachedItems 为空时，用文件元数据填充，确保评论列表可见
+      if (!cachedItems && fileItems.length > 0) {
+        cachedItems = fileItems;
       }
 
       // 校准文章 ID 列表
