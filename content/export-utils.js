@@ -21,18 +21,30 @@
     refs.progressBar.style.width = '0%';
   }
 
+  function _formatTimestamp(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   function buildFrontmatter(data) {
-    return [
+    const lines = [
       '---',
       `id: "${data.id || ''}"`,
       `title: "${(data.title || '').replace(/"/g, '\\"')}"`,
-      `author: "${(data.author || '').replace(/"/g, '\\"')}"`,
+      `author: "${(data.author?.name || data.author || '').replace(/"/g, '\\"')}"`,
       `type: zhihu-${data.type}`,
       `source: "${data.url}"`,
-      `date: "${new Date().toISOString().split('T')[0]}"`,
-      '---',
-      '',
-    ].join('\n');
+    ];
+    const created = _formatTimestamp(data.createdTime || data.created_time || data.created);
+    const updated = _formatTimestamp(data.updatedTime || data.updated_time || data.updated);
+    if (created) lines.push(`created: "${created}"`);
+    if (updated) lines.push(`updated: "${updated}"`);
+    lines.push(`downloaded: "${new Date().toISOString().split('T')[0]}"`);
+    lines.push('---', '');
+    return lines.join('\n');
   }
 
   function extractContentId(item) {

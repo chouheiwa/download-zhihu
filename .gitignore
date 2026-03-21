@@ -3,3 +3,4 @@
 *.pem
 *.har
 node_modules/
+temp

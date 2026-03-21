@@ -25,20 +25,32 @@
     const fromDOM = extractFromDOM(pageInfo, url);
 
     // 两个来源都有时，用 html 更长的那个（initialData 可能截断长文章）
+    let result = null;
     if (fromData && fromDOM) {
       const dataLen = (fromData.html || '').length;
       const domLen = (fromDOM.html || '').length;
       if (domLen > dataLen) {
         fromDOM._source = `DOM(${domLen}) > initialData(${dataLen})`;
-        return fromDOM;
+        // DOM 内容更长，但时间信息从 initialData 补充
+        fromDOM.createdTime = fromDOM.createdTime || fromData.createdTime;
+        fromDOM.updatedTime = fromDOM.updatedTime || fromData.updatedTime;
+        result = fromDOM;
+      } else {
+        fromData._source = `initialData(${dataLen}) >= DOM(${domLen})`;
+        result = fromData;
       }
-      fromData._source = `initialData(${dataLen}) >= DOM(${domLen})`;
-      return fromData;
+    } else if (fromData) {
+      fromData._source = 'initialData';
+      result = fromData;
+    } else if (fromDOM) {
+      fromDOM._source = 'DOM';
+      result = fromDOM;
     }
 
-    if (fromData) { fromData._source = 'initialData'; return fromData; }
-    if (fromDOM) { fromDOM._source = 'DOM'; return fromDOM; }
-    return null;
+    if (result) {
+      result.id = pageInfo.id;
+    }
+    return result;
   }
 
   function extractInitialData() {
@@ -64,6 +76,8 @@
           title: data?.question?.title || `知乎问题${questionId}`,
           author: data?.author?.name || '知乎用户',
           html: data?.content || '',
+          createdTime: data?.created_time || null,
+          updatedTime: data?.updated_time || null,
         };
       }
       case 'article': {
@@ -73,6 +87,8 @@
           title: data?.title || `知乎文章${id}`,
           author: data?.author?.name || '知乎用户',
           html: data?.content || '',
+          createdTime: data?.created || null,
+          updatedTime: data?.updated || null,
         };
       }
       case 'question': {
@@ -118,6 +134,8 @@
           title: `想法${id}`,
           author,
           html: contentHtml + (imgsHtml ? `<div>${imgsHtml}</div>` : ''),
+          createdTime: pinData?.created || null,
+          updatedTime: pinData?.updated || null,
         };
       }
       default:

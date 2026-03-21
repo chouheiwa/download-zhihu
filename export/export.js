@@ -641,7 +641,8 @@
                   title: item.title,
                   author: item.author?.name || item.author,
                   url: item.url,
-                  date: new Date().toISOString().split('T')[0],
+                  createdTime: item.created_time || item.created || null,
+                  updatedTime: item.updated_time || item.updated || null,
                 },
               });
 

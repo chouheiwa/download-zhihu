@@ -378,7 +378,7 @@
         articleLog(refs, '正在生成 Word 文档...', 'info');
         u.showProgress(refs, 1, 1, '正在生成 Word 文档...');
         const frontMatter = refs.optFm.checked
-          ? { id: data.id, title: data.title, author: data.author, url: data.url, date: new Date().toISOString().split('T')[0] }
+          ? { id: data.id, title: data.title, author: data.author, url: data.url, createdTime: data.createdTime, updatedTime: data.updatedTime }
           : null;
         const docxBlob = await window.htmlToDocx(data.html, {
           images: docxImgMode,
@@ -544,7 +544,7 @@
         articleLog(refs, '正在生成 Word 文档...');
         refs.btnSaveFolder.textContent = '正在生成 Word 文档...';
         const frontMatter = refs.optFm.checked
-          ? { id: data.id, title: data.title, author: data.author, url: data.url, date: new Date().toISOString().split('T')[0] }
+          ? { id: data.id, title: data.title, author: data.author, url: data.url, createdTime: data.createdTime, updatedTime: data.updatedTime }
           : null;
         const docxBlob = await window.htmlToDocx(data.html, {
           images: docxImgMode,
