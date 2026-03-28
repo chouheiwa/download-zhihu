@@ -62,6 +62,9 @@ export interface ZhihuComment {
   child_comment_count: number;
   child_comments?: ZhihuComment[];
   like_count?: number;
+  reply_to_author?: { name: string };
+  author_tag?: Array<{ type: string; text?: string }>;
+  comment_tag?: Array<{ type: string; text?: string }>;
 }
 
 /** 导出进度 */
