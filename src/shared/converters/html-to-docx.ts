@@ -9,14 +9,14 @@ import {
   Math as DocxMath, MathRun as DocxMathRun,
   MathFraction, MathSuperScript, MathSubScript, MathSubSuperScript,
   MathRadical, MathRoundBrackets, MathSquareBrackets, MathCurlyBrackets,
-  MathSum, MathIntegral, MathAccentCharacter,
+  MathSum, MathIntegral,
   MathLimitLower, MathLimitUpper, MathFunction,
   EndnoteReferenceRun,
   LevelFormat, convertInchesToTwip,
   type IParagraphOptions,
 } from 'docx';
 import temml from 'temml';
-import mathml2omml from '@/vendor/mathml2omml.min.js';
+import { mml2omml } from '@/vendor/mathml2omml.min.js';
 
 import {
   getLatex, isMath, isInlineMath,
@@ -133,7 +133,7 @@ function convertLatexToDocxMath(latex: string): MathComponent[] | null {
   try {
     // Temml + mathml2omml pipeline
     const mathml = temml.renderToString(latex);
-    const omml = mathml2omml.mml2omml(mathml);
+    const omml = mml2omml(mathml);
     return parseOmmlToDocxMath(omml);
   } catch (e) {
     console.warn('LaTeX→OMML 转换失败:', latex, e);
@@ -339,10 +339,12 @@ function convertOmmlAccent(el: Element): MathComponent {
     const chrEl = findChild(accPr, 'chr');
     if (chrEl) chr = chrEl.getAttribute('m:val') || chrEl.getAttribute('val') || chr;
   }
-  return new MathAccentCharacter({
-    accent: chr,
-    children: ommlChildrenOf(el, 'e'),
-  });
+  // MathAccentCharacter was removed in docx v9; fallback to MathRun with children
+  const children = ommlChildrenOf(el, 'e');
+  if (children.length > 0) {
+    return children[0];
+  }
+  return new DocxMathRun(chr);
 }
 
 /** m:limLow -> Lower limit */
