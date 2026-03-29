@@ -7,13 +7,20 @@ interface RetryInfo {
   waitMs: number;
 }
 
+interface FabPosition {
+  right: number;
+  bottom: number;
+}
+
 interface UIState {
   panelOpen: boolean;
+  fabPos: FabPosition;
   logs: LogEntry[];
   retryInfo: RetryInfo | null;
 
   togglePanel: () => void;
   setPanelOpen: (open: boolean) => void;
+  setFabPos: (pos: FabPosition) => void;
   addLog: (message: string, level: LogLevel) => void;
   clearLogs: () => void;
   setRetryInfo: (info: RetryInfo | null) => void;
@@ -21,11 +28,13 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   panelOpen: false,
+  fabPos: { right: 24, bottom: 100 },
   logs: [],
   retryInfo: null,
 
   togglePanel: () => set((s) => ({ panelOpen: !s.panelOpen })),
   setPanelOpen: (open) => set({ panelOpen: open }),
+  setFabPos: (pos) => set({ fabPos: pos }),
   addLog: (message, level) => set((s) => ({
     logs: [...s.logs, {
       time: new Date().toLocaleTimeString(),

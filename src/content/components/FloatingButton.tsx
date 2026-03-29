@@ -69,9 +69,12 @@ export function FloatingButton() {
     };
   }, []);
 
+  const setFabPos = useUIStore((s) => s.setFabPos);
+
   useEffect(() => {
     savePosition(pos.right, pos.bottom);
-  }, [pos]);
+    setFabPos(pos);
+  }, [pos, setFabPos]);
 
   const onClick = useCallback(() => {
     if (dragState.current.hasMoved) return;

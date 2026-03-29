@@ -55,6 +55,11 @@ export function ContentApp() {
 }
 
 function PanelWrapper({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const fabPos = useUIStore((s) => s.fabPos);
+  // 面板位置跟随 FAB：水平居中对齐，垂直在按钮上方
+  const panelRight = Math.max(8, fabPos.right - 148);
+  const panelBottom = fabPos.bottom + 56;
+
   return (
     <Card
       title={<span style={{ color: '#0066ff', fontWeight: 600 }}>知乎文章下载器</span>}
@@ -68,8 +73,8 @@ function PanelWrapper({ children, onClose }: { children: React.ReactNode; onClos
       }
       style={{
         position: 'fixed',
-        right: 24,
-        bottom: 160,
+        right: panelRight,
+        bottom: panelBottom,
         width: 340,
         maxHeight: 480,
         boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
