@@ -178,6 +178,23 @@ body {
   gap: 0.6rem;
 }
 
+/* 标题装饰圆圈 */
+.title-decoration {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--zhu-glow);
+  color: var(--zhu);
+  font-family: var(--font-song);
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid var(--zhu-light);
+}
+
 .ant-card .ant-card-head-title::before {
   content: '';
   display: inline-block;

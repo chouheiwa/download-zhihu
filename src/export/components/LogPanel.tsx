@@ -20,7 +20,7 @@ export function LogPanel() {
   }, [logs]);
 
   return (
-    <Card title="操作日志" className="log-panel-card" style={{ marginTop: 24 }}>
+    <Card title={<><span className="title-decoration">录</span>操作日志</>} className="log-panel-card" style={{ marginTop: 24 }}>
       <div ref={scrollRef} className="log-scroll">
         {logs.map((log, i) => (
           <div key={i} className="log-entry">

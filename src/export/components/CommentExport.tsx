@@ -236,7 +236,7 @@ export function CommentExport({ collectionId, collectionName }: Props) {
   // If no articles exported yet
   if (totalArticles === 0) {
     return (
-      <Card title="评论导出">
+      <Card title={<><span className="title-decoration">三</span>评论导出</>}>
         <Typography.Text type="secondary">请先导出文章</Typography.Text>
       </Card>
     );
@@ -248,7 +248,7 @@ export function CommentExport({ collectionId, collectionName }: Props) {
       : 0;
 
   return (
-    <Card title="评论导出">
+    <Card title={<><span className="title-decoration">三</span>评论导出</>}>
       {/* Status */}
       <Typography.Text>
         已导出 {exportedComments} / {totalArticles} 篇文章的评论

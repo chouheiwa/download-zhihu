@@ -45,7 +45,7 @@ export function FolderPicker({ collectionId, collectionName }: Props) {
   };
 
   return (
-    <Card title="选择目录" style={{ marginBottom: 16 }}>
+    <Card title={<><span className="title-decoration">一</span>选择目录</>} style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <div className="folder-display">
           {dirHandle ? dirHandle.name : '未选择文件夹'}

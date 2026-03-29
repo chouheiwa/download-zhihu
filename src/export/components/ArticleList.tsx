@@ -386,7 +386,7 @@ export function ArticleList({
       : 0;
 
   return (
-    <Card title="文章导出">
+    <Card title={<><span className="title-decoration">二</span>文章导出</>}>
       <Typography.Text>
         已导出 {exported} 篇{dateInfo}
       </Typography.Text>

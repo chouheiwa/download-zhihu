@@ -11,7 +11,7 @@ export function FormatSelector() {
   const setWantImages = useExportStore((s) => s.setWantImages);
 
   return (
-    <Card title="导出格式" style={{ marginBottom: 16 }}>
+    <Card title={<><span className="title-decoration">式</span>导出格式</>} style={{ marginBottom: 16 }}>
       <Space direction="vertical">
         <Radio.Group value={format} onChange={(e) => setFormat(e.target.value)}>
           <Radio value="md">Markdown</Radio>
