@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Checkbox, Radio, Progress, Typography, Space, Divider } from 'antd';
 import { useExportStore } from '@/shared/stores/exportStore';
 import { useUIStore } from '@/shared/stores/uiStore';
@@ -69,6 +69,15 @@ export function ArticleList({
   const setExportProgress = useExportStore((s) => s.setExportProgress);
   const setItems = useExportStore((s) => s.setItems);
   const addLog = useUIStore((s) => s.addLog);
+
+  // 获取收藏夹/专栏总篇数
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  useEffect(() => {
+    const fetchFn = sourceType === 'column' ? fetchColumnPage : fetchCollectionPage;
+    fetchFn(collectionApiUrl)
+      .then((result) => setTotalCount(result.totals))
+      .catch(() => {});
+  }, [collectionApiUrl, sourceType]);
 
   /**
    * Paginated directory fetching.
@@ -411,7 +420,7 @@ export function ArticleList({
       <Divider style={{ margin: '8px 0' }} />
 
       <Typography.Text>
-        已导出 {exported} 篇{dateInfo}
+        已导出 {exported}{totalCount != null ? ` / ${totalCount}` : ''} 篇{dateInfo}
       </Typography.Text>
 
       <div style={{ marginTop: 4 }}>
