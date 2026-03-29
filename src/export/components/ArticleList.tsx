@@ -75,7 +75,10 @@ export function ArticleList({
   useEffect(() => {
     const fetchFn = sourceType === 'column' ? fetchColumnPage : fetchCollectionPage;
     fetchFn(collectionApiUrl)
-      .then((result) => setTotalCount(result.totals))
+      .then((result) => {
+        // 没有下一页时用实际 items 数量（比 paging.totals 更准确）
+        setTotalCount(result.nextUrl ? result.totals : result.items.length);
+      })
       .catch(() => {});
   }, [collectionApiUrl, sourceType]);
 
