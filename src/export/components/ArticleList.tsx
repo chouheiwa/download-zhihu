@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Checkbox, Radio, Progress, Typography, Space, Divider } from 'antd';
+import { Button, Card, Switch, Segmented, Progress, Typography, Space, Divider } from 'antd';
 import { useExportStore } from '@/shared/stores/exportStore';
 import { useUIStore } from '@/shared/stores/uiStore';
 import { fetchCollectionPage, fetchColumnPage, checkPaidAccess, fetchFullContent } from '@/shared/api/zhihu-api';
@@ -399,21 +399,38 @@ export function ArticleList({
   return (
     <Card title={<><span className="title-decoration">二</span>文章导出</>}>
       {/* 导出格式选择 */}
-      <Space direction="vertical" size={4} style={{ marginBottom: 12 }}>
-        <Radio.Group value={format} onChange={(e) => setFormat(e.target.value)} size="small">
-          <Radio value="md">Markdown</Radio>
-          <Radio value="docx">Word (.docx)</Radio>
-        </Radio.Group>
+      <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography.Text style={{ fontSize: 13 }}>导出格式</Typography.Text>
+          <Segmented
+            value={format}
+            onChange={(v) => setFormat(v as 'md' | 'docx')}
+            options={[
+              { label: 'Markdown', value: 'md' },
+              { label: 'Word', value: 'docx' },
+            ]}
+            size="small"
+          />
+        </div>
         {format === 'md' && (
-          <Checkbox checked={wantImages} onChange={(e) => setWantImages(e.target.checked)}>
-            存图
-          </Checkbox>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography.Text style={{ fontSize: 13 }}>下载图片</Typography.Text>
+            <Switch checked={wantImages} onChange={setWantImages} size="small" />
+          </div>
         )}
         {format === 'docx' && (
-          <Radio.Group value={docxImageMode} onChange={(e) => setDocxImageMode(e.target.value)} size="small">
-            <Radio value="embed">嵌入图片到文档</Radio>
-            <Radio value="link">图片使用外部链接</Radio>
-          </Radio.Group>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography.Text style={{ fontSize: 13 }}>图片处理</Typography.Text>
+            <Segmented
+              value={docxImageMode}
+              onChange={(v) => setDocxImageMode(v as 'embed' | 'link')}
+              options={[
+                { label: '嵌入文档', value: 'embed' },
+                { label: '外部链接', value: 'link' },
+              ]}
+              size="small"
+            />
+          </div>
         )}
       </Space>
 
