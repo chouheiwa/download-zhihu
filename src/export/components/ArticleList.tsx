@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Button, Card, Checkbox, Progress, Typography } from 'antd';
+import { Button, Card, Checkbox, Radio, Progress, Typography, Space, Divider } from 'antd';
 import { useExportStore } from '@/shared/stores/exportStore';
 import { useUIStore } from '@/shared/stores/uiStore';
 import { fetchCollectionPage, fetchColumnPage, checkPaidAccess, fetchFullContent } from '@/shared/api/zhihu-api';
@@ -57,7 +57,9 @@ export function ArticleList({
 }: Props) {
   const dirHandle = useExportStore((s) => s.dirHandle);
   const format = useExportStore((s) => s.format);
+  const setFormat = useExportStore((s) => s.setFormat);
   const docxImageMode = useExportStore((s) => s.docxImageMode);
+  const setDocxImageMode = useExportStore((s) => s.setDocxImageMode);
   const wantImages = useExportStore((s) => s.wantImages);
   const setWantImages = useExportStore((s) => s.setWantImages);
   const progressData = useExportStore((s) => s.progressData);
@@ -387,20 +389,30 @@ export function ArticleList({
 
   return (
     <Card title={<><span className="title-decoration">二</span>文章导出</>}>
+      {/* 导出格式选择 */}
+      <Space direction="vertical" size={4} style={{ marginBottom: 12 }}>
+        <Radio.Group value={format} onChange={(e) => setFormat(e.target.value)} size="small">
+          <Radio value="md">Markdown</Radio>
+          <Radio value="docx">Word (.docx)</Radio>
+        </Radio.Group>
+        {format === 'md' && (
+          <Checkbox checked={wantImages} onChange={(e) => setWantImages(e.target.checked)}>
+            存图
+          </Checkbox>
+        )}
+        {format === 'docx' && (
+          <Radio.Group value={docxImageMode} onChange={(e) => setDocxImageMode(e.target.value)} size="small">
+            <Radio value="embed">嵌入图片到文档</Radio>
+            <Radio value="link">图片使用外部链接</Radio>
+          </Radio.Group>
+        )}
+      </Space>
+
+      <Divider style={{ margin: '8px 0' }} />
+
       <Typography.Text>
         已导出 {exported} 篇{dateInfo}
       </Typography.Text>
-
-      {format === 'md' && (
-        <div style={{ marginTop: 8 }}>
-          <Checkbox
-            checked={wantImages}
-            onChange={(e) => setWantImages(e.target.checked)}
-          >
-            存图
-          </Checkbox>
-        </div>
-      )}
 
       <div style={{ marginTop: 4 }}>
         <span className="note-text">含 Front Matter 元信息，供评论导出识别</span>

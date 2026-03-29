@@ -4,7 +4,7 @@ import styles from '@/shared/theme/ink-wash.module.css';
 import { useExportStore } from '@/shared/stores/exportStore';
 import { useUIStore } from '@/shared/stores/uiStore';
 import { FolderPicker } from './FolderPicker';
-import { FormatSelector } from './FormatSelector';
+
 import { ArticleList } from './ArticleList';
 import { CommentExport } from './CommentExport';
 import { LogPanel } from './LogPanel';
@@ -49,7 +49,6 @@ export function ExportManager() {
 
         {dirHandle && (
           <>
-            <FormatSelector />
             <div className="export-grid">
               <ArticleList
                 collectionId={collectionId}
