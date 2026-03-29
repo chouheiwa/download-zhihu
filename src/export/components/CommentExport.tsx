@@ -69,7 +69,9 @@ export function CommentExport({ collectionId, collectionName }: Props) {
   const availableItems = useMemo(() => {
     if (!progressData) return [];
     const exportedIds = new Set(progressData.articles.exportedIds || []);
-    return items.filter((item) => item.id && exportedIds.has(item.id));
+    return items
+      .filter((item) => item.id && exportedIds.has(item.id))
+      .sort((a, b) => (b.created_time || 0) - (a.created_time || 0));
   }, [items, progressData]);
 
   const commentedSet = useMemo(() => {
@@ -107,6 +109,8 @@ export function CommentExport({ collectionId, collectionName }: Props) {
       title: '收藏时间',
       dataIndex: 'created_time',
       width: 100,
+      sorter: (a, b) => (a.created_time || 0) - (b.created_time || 0),
+      defaultSortOrder: 'descend',
       render: (v) => formatTimestamp(v),
     },
     {

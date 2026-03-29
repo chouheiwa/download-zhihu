@@ -111,6 +111,8 @@ async function reconcileProgress(
           const authorMatch = head.match(/^author:\s*"(.+)"/m);
           const typeMatch = head.match(/^type:\s*zhihu-(\S+)/m);
           const sourceMatch = head.match(/^source:\s*"([^"]+)"/m);
+          const createdMatch = head.match(/^created:\s*"(\d{4}-\d{2}-\d{2}[^"]*)"/m);
+          const updatedMatch = head.match(/^updated:\s*"(\d{4}-\d{2}-\d{2}[^"]*)"/m);
           fileItems.push({
             id: articleId,
             title: titleMatch ? titleMatch[1].replace(/\\"/g, '"') : '',
@@ -121,8 +123,8 @@ async function reconcileProgress(
             isTruncated: false,
             isPaidContent: false,
             commentCount: 0,
-            created_time: 0,
-            updated_time: 0,
+            created_time: createdMatch ? Math.floor(new Date(createdMatch[1]).getTime() / 1000) : 0,
+            updated_time: updatedMatch ? Math.floor(new Date(updatedMatch[1]).getTime() / 1000) : 0,
           });
         }
       } catch { /* skip */ }
