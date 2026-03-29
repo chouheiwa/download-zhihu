@@ -17,5 +17,13 @@ export const inkWashTheme: ThemeConfig = {
   components: {
     Button: { borderRadius: 4 },
     Card: { borderRadius: 8 },
+    Segmented: {
+      itemSelectedBg: '#0066FF',
+      itemSelectedColor: '#FFFFFF',
+    },
+    Switch: {
+      colorPrimary: '#0066FF',
+      colorPrimaryHover: '#0052CC',
+    },
   },
 };

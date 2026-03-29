@@ -412,26 +412,10 @@ export function ArticleList({
             size="small"
           />
         </div>
-        {format === 'md' && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography.Text style={{ fontSize: 13 }}>下载图片</Typography.Text>
-            <Switch checked={wantImages} onChange={setWantImages} size="small" />
-          </div>
-        )}
-        {format === 'docx' && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography.Text style={{ fontSize: 13 }}>图片处理</Typography.Text>
-            <Segmented
-              value={docxImageMode}
-              onChange={(v) => setDocxImageMode(v as 'embed' | 'link')}
-              options={[
-                { label: '嵌入文档', value: 'embed' },
-                { label: '外部链接', value: 'link' },
-              ]}
-              size="small"
-            />
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography.Text style={{ fontSize: 13 }}>下载图片</Typography.Text>
+          <Switch checked={wantImages} onChange={setWantImages} size="small" />
+        </div>
       </Space>
 
       <Divider style={{ margin: '8px 0' }} />
