@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Card, Space, Typography } from 'antd';
+import { Button, Card } from 'antd';
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { useExportStore } from '@/shared/stores/exportStore';
 import { useUIStore } from '@/shared/stores/uiStore';
@@ -45,15 +45,15 @@ export function FolderPicker({ collectionId, collectionName }: Props) {
   };
 
   return (
-    <Card style={{ marginTop: 24 }}>
-      <Space>
-        <Typography.Text>
-          {dirHandle ? `📁 ${dirHandle.name}` : '未选择文件夹'}
-        </Typography.Text>
+    <Card title="选择目录" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="folder-display">
+          {dirHandle ? dirHandle.name : '未选择文件夹'}
+        </div>
         <Button icon={<FolderOpenOutlined />} onClick={handleSelectFolder}>
           {dirHandle ? '更换文件夹' : '选择文件夹'}
         </Button>
-      </Space>
+      </div>
     </Card>
   );
 }

@@ -386,7 +386,7 @@ export function ArticleList({
       : 0;
 
   return (
-    <Card title="文章导出" style={{ marginTop: 16 }}>
+    <Card title="文章导出">
       <Typography.Text>
         已导出 {exported} 篇{dateInfo}
       </Typography.Text>
@@ -403,9 +403,7 @@ export function ArticleList({
       )}
 
       <div style={{ marginTop: 4 }}>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          含 Front Matter 元信息，供评论导出识别
-        </Typography.Text>
+        <span className="note-text">含 Front Matter 元信息，供评论导出识别</span>
       </div>
 
       {exportProgress && (

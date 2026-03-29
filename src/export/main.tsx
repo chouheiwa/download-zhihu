@@ -5,6 +5,7 @@ import { inkWashTheme } from '@/shared/theme/token';
 import { setOnRetry } from '@/shared/api/throttle';
 import { useUIStore } from '@/shared/stores/uiStore';
 import { ExportManager } from './components/ExportManager';
+import './export.css';
 
 // Wire throttle retry callback to UI store
 setOnRetry((attempt, max, waitMs) => {

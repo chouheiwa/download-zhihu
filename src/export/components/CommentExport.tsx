@@ -270,29 +270,19 @@ export function CommentExport({ collectionId, collectionName }: Props) {
       </div>
 
       {/* Article list with checkboxes */}
-      <div style={{ maxHeight: 300, overflowY: 'auto', marginBottom: 12 }}>
+      <div className="scrollable-list" style={{ marginBottom: 12 }}>
         {availableItems.map((item) => {
           const isCommented = commentedSet.has(item.id);
           const typeLabel = TYPE_LABELS[item.type] || item.type;
           const title = item.title || `${item.author}的${typeLabel}`;
           return (
-            <div
-              key={item.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '4px 0',
-              }}
-            >
+            <div key={item.id} className="comment-article-item">
               <Checkbox
                 checked={selectedIds.has(item.id)}
                 onChange={() => toggle(item.id)}
                 disabled={isExportingComments}
               />
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {title}
-              </span>
+              <span className="item-title">{title}</span>
               {isCommented && <Tag color="green">已导出</Tag>}
             </div>
           );

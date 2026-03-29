@@ -27,24 +27,30 @@ export function ExportManager() {
   }, []);
 
   return (
-    <Layout className={styles.inkWashBg} style={{ minHeight: '100vh' }}>
+    <Layout className={`${styles.inkWashBg} export-app`} style={{ minHeight: '100vh', background: 'transparent' }}>
       <div className={styles.inkWash1} />
       <div className={styles.inkWash2} />
       <div className={styles.ricePaperTexture} />
 
-      <Header style={{ background: 'transparent', textAlign: 'center', padding: '24px 0', height: 'auto', lineHeight: 'normal' }}>
+      <Header className="app-header" style={{ background: 'transparent', height: 'auto', lineHeight: 'normal' }}>
         <div className={styles.sealMark}>藏</div>
-        <Typography.Title level={2} style={{ margin: '8px 0 0' }}>导出管理器</Typography.Title>
-        <Typography.Text type="secondary">{sourceLabel}：{collectionName}</Typography.Text>
+        <div className="header-center">
+          <Typography.Title level={2} className="app-title">导出管理器</Typography.Title>
+          <Typography.Text className="app-subtitle">{sourceLabel}：{collectionName}</Typography.Text>
+        </div>
+        <div className="header-status">
+          <span className="status-dot" />
+          已就绪
+        </div>
       </Header>
 
-      <Content style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', width: '100%' }}>
+      <Content style={{ maxWidth: 880, margin: '0 auto', padding: '1.5rem 2rem', width: '100%' }}>
         <FolderPicker collectionId={collectionId} collectionName={collectionName} />
 
         {dirHandle && (
           <>
             <FormatSelector />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24 }}>
+            <div className="export-grid">
               <ArticleList
                 collectionId={collectionId}
                 collectionName={collectionName}
@@ -61,8 +67,9 @@ export function ExportManager() {
         )}
       </Content>
 
-      <Footer style={{ textAlign: 'center', background: 'transparent' }}>
-        <Typography.Text type="secondary">知乎导出工具</Typography.Text>
+      <Footer className="app-footer" style={{ background: 'transparent' }}>
+        <div className="footer-line" />
+        <p>知乎导出工具</p>
       </Footer>
     </Layout>
   );

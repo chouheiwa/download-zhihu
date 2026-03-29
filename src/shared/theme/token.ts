@@ -2,20 +2,20 @@ import type { ThemeConfig } from 'antd';
 
 export const inkWashTheme: ThemeConfig = {
   token: {
-    colorPrimary: '#2c3e50',
-    colorSuccess: '#27ae60',
-    colorWarning: '#d69e2e',
-    colorError: '#c0392b',
-    colorBgBase: '#f5f0e8',
-    colorBgContainer: '#faf6ef',
-    colorBorder: '#d4c5a9',
-    colorText: '#2c3e50',
-    colorTextSecondary: '#666',
-    fontFamily: '"Noto Serif SC", "LXGW WenKai", serif',
+    colorPrimary: '#0066FF',
+    colorSuccess: '#2D6A4F',
+    colorWarning: '#B8860B',
+    colorError: '#C03030',
+    colorBgBase: '#F4F6F9',
+    colorBgContainer: '#FFFFFF',
+    colorBorder: '#D4DCE5',
+    colorText: '#1A2332',
+    colorTextSecondary: '#7B8A9A',
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
     borderRadius: 4,
   },
   components: {
-    Button: { borderRadius: 6 },
+    Button: { borderRadius: 4 },
     Card: { borderRadius: 8 },
   },
 };
