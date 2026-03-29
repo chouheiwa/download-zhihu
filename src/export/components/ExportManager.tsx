@@ -49,18 +49,16 @@ export function ExportManager() {
 
         {dirHandle && (
           <>
-            <div className="export-grid">
-              <ArticleList
-                collectionId={collectionId}
-                collectionName={collectionName}
-                collectionApiUrl={collectionApiUrl}
-                sourceType={sourceType}
-              />
-              <CommentExport
-                collectionId={collectionId}
-                collectionName={collectionName}
-              />
-            </div>
+            <ArticleList
+              collectionId={collectionId}
+              collectionName={collectionName}
+              collectionApiUrl={collectionApiUrl}
+              sourceType={sourceType}
+            />
+            <CommentExport
+              collectionId={collectionId}
+              collectionName={collectionName}
+            />
             <LogPanel />
           </>
         )}

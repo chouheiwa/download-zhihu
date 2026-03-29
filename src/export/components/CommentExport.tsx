@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Card, Checkbox, Typography, Button, Progress, Tag } from 'antd';
+import { Card, Typography, Button, Progress, Tag, Table } from 'antd';
+import type { TableColumnsType } from 'antd';
 import { useExportStore } from '@/shared/stores/exportStore';
 import { useUIStore } from '@/shared/stores/uiStore';
 import { fetchAllComments } from '@/shared/api/zhihu-api';
@@ -40,6 +41,14 @@ function buildItemName(item: ContentItem, typeLabel: string, num: number): strin
   }
 }
 
+function formatTimestamp(ts: number): string {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function CommentExport({ collectionId, collectionName }: Props) {
   const dirHandle = useExportStore((s) => s.dirHandle);
   const format = useExportStore((s) => s.format);
@@ -50,14 +59,13 @@ export function CommentExport({ collectionId, collectionName }: Props) {
   const markCommentExported = useExportStore((s) => s.markCommentExported);
   const addLog = useUIStore((s) => s.addLog);
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [commentProgress, setCommentProgress] = useState<{
     current: number;
     total: number;
     text: string;
   } | null>(null);
 
-  // Filter items to only show exported articles
   const availableItems = useMemo(() => {
     if (!progressData) return [];
     const exportedIds = new Set(progressData.articles.exportedIds || []);
@@ -72,42 +80,53 @@ export function CommentExport({ collectionId, collectionName }: Props) {
   const totalArticles = progressData?.articles.totalExported ?? 0;
   const exportedComments = progressData?.comments.totalExported ?? 0;
 
-  // Selection helpers
-  const allSelected = availableItems.length > 0 && availableItems.every((item) => selectedIds.has(item.id));
-  const someSelected = !allSelected && availableItems.some((item) => selectedIds.has(item.id));
+  const columns: TableColumnsType<ContentItem> = [
+    {
+      title: '标题',
+      dataIndex: 'title',
+      ellipsis: true,
+      render: (_, record) => {
+        const typeLabel = TYPE_LABELS[record.type] || record.type;
+        return record.title || `${record.author}的${typeLabel}`;
+      },
+    },
+    {
+      title: '作者',
+      dataIndex: 'author',
+      width: 100,
+      ellipsis: true,
+      render: (v) => v || '知乎用户',
+    },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      width: 60,
+      render: (v) => TYPE_LABELS[v] || v,
+    },
+    {
+      title: '收藏时间',
+      dataIndex: 'created_time',
+      width: 100,
+      render: (v) => formatTimestamp(v),
+    },
+    {
+      title: '状态',
+      key: 'status',
+      width: 80,
+      align: 'center',
+      render: (_, record) =>
+        commentedSet.has(record.id) ? (
+          <Tag color="green">已导出</Tag>
+        ) : (
+          <Tag>未导出</Tag>
+        ),
+    },
+  ];
 
-  const selectAll = useCallback(() => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(availableItems.map((item) => item.id)));
-    }
-  }, [allSelected, availableItems]);
-
-  const toggle = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  // Button text
-  const buttonText = useMemo(() => {
-    if (isExportingComments) return '导出中...';
-    if (selectedIds.size > 0) return `导出选中的 ${selectedIds.size} 篇评论`;
-    return '请选择要导出评论的文章';
-  }, [isExportingComments, selectedIds.size]);
-
-  // Export handler
   const handleExportComments = useCallback(async () => {
     if (isExportingComments || !dirHandle || !progressData) return;
 
-    const selected = availableItems.filter((item) => selectedIds.has(item.id));
+    const selected = availableItems.filter((item) => selectedRowKeys.includes(item.id));
     if (selected.length === 0) {
       addLog('未选择任何文章', 'warn');
       return;
@@ -150,7 +169,6 @@ export function CommentExport({ collectionId, collectionName }: Props) {
           });
 
           if (comments.length > 0) {
-            // Comment image processing
             let commentImageMapping: Record<string, string> = {};
             if (imagesFolder) {
               const imgEntries = collectCommentImageEntries(comments);
@@ -167,7 +185,6 @@ export function CommentExport({ collectionId, collectionName }: Props) {
               }
             }
 
-            // Generate comment filename matching article name
             const typeLabel = TYPE_LABELS[item.type] || item.type;
             const baseName = sanitizeFilename(buildItemName(item, typeLabel, 0));
 
@@ -175,20 +192,16 @@ export function CommentExport({ collectionId, collectionName }: Props) {
               const commentBlob = await commentsToDocx(comments, displayTitle);
               const commentFilename = `${baseName}-评论.docx`;
               await writeBlobFile(articlesFolder, commentFilename, commentBlob);
-
               const totalComments = comments.reduce(
-                (sum, c) => sum + 1 + (c.child_comments || []).length,
-                0,
+                (sum, c) => sum + 1 + (c.child_comments || []).length, 0,
               );
               addLog(`已导出 ${totalComments} 条评论: ${commentFilename}`, 'success');
             } else {
               const commentMd = buildCommentsMarkdown(comments, displayTitle, commentImageMapping);
               const commentFilename = `${baseName}-评论.md`;
               await writeTextFile(articlesFolder, commentFilename, commentMd);
-
               const totalComments = comments.reduce(
-                (sum, c) => sum + 1 + (c.child_comments || []).length,
-                0,
+                (sum, c) => sum + 1 + (c.child_comments || []).length, 0,
               );
               addLog(`已导出 ${totalComments} 条评论: ${commentFilename}`, 'success');
             }
@@ -224,7 +237,7 @@ export function CommentExport({ collectionId, collectionName }: Props) {
     dirHandle,
     progressData,
     availableItems,
-    selectedIds,
+    selectedRowKeys,
     collectionName,
     collectionId,
     format,
@@ -233,10 +246,9 @@ export function CommentExport({ collectionId, collectionName }: Props) {
     markCommentExported,
   ]);
 
-  // If no articles exported yet
   if (totalArticles === 0) {
     return (
-      <Card title={<><span className="title-decoration">三</span>评论导出</>}>
+      <Card title={<><span className="title-decoration">三</span>评论导出</>} style={{ marginTop: 16 }}>
         <Typography.Text type="secondary">请先导出文章</Typography.Text>
       </Card>
     );
@@ -248,48 +260,26 @@ export function CommentExport({ collectionId, collectionName }: Props) {
       : 0;
 
   return (
-    <Card title={<><span className="title-decoration">三</span>评论导出</>}>
-      {/* Status */}
+    <Card title={<><span className="title-decoration">三</span>评论导出</>} style={{ marginTop: 16 }}>
       <Typography.Text>
         已导出 {exportedComments} / {totalArticles} 篇文章的评论
       </Typography.Text>
 
-      {/* Select all */}
-      <div style={{ margin: '12px 0 8px' }}>
-        <Checkbox
-          checked={allSelected}
-          indeterminate={someSelected}
-          onChange={selectAll}
-          disabled={isExportingComments}
-        >
-          全选
-        </Checkbox>
-        <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-          已选 {selectedIds.size} 篇
-        </Typography.Text>
-      </div>
+      <Table<ContentItem>
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (keys) => setSelectedRowKeys(keys),
+          getCheckboxProps: () => ({ disabled: isExportingComments }),
+        }}
+        columns={columns}
+        dataSource={availableItems}
+        rowKey="id"
+        size="small"
+        pagination={false}
+        scroll={{ y: 320 }}
+        style={{ marginTop: 12, marginBottom: 12 }}
+      />
 
-      {/* Article list with checkboxes */}
-      <div className="scrollable-list" style={{ marginBottom: 12 }}>
-        {availableItems.map((item) => {
-          const isCommented = commentedSet.has(item.id);
-          const typeLabel = TYPE_LABELS[item.type] || item.type;
-          const title = item.title || `${item.author}的${typeLabel}`;
-          return (
-            <div key={item.id} className="comment-article-item">
-              <Checkbox
-                checked={selectedIds.has(item.id)}
-                onChange={() => toggle(item.id)}
-                disabled={isExportingComments}
-              />
-              <span className="item-title">{title}</span>
-              {isCommented && <Tag color="green">已导出</Tag>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Progress */}
       {commentProgress && (
         <div style={{ marginBottom: 12 }}>
           <Progress percent={progressPercent} size="small" />
@@ -299,15 +289,18 @@ export function CommentExport({ collectionId, collectionName }: Props) {
         </div>
       )}
 
-      {/* Export button */}
       <Button
         type="primary"
         block
         onClick={handleExportComments}
         loading={isExportingComments}
-        disabled={selectedIds.size === 0 && !isExportingComments}
+        disabled={selectedRowKeys.length === 0 && !isExportingComments}
       >
-        {buttonText}
+        {isExportingComments
+          ? '导出中...'
+          : selectedRowKeys.length > 0
+            ? `导出选中的 ${selectedRowKeys.length} 篇评论`
+            : '请选择要导出评论的文章'}
       </Button>
     </Card>
   );
