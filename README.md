@@ -28,12 +28,17 @@
 4. 右上角开启 **开发者模式**
 5. 点击 **加载已解压的扩展程序**，选择解压后的文件夹
 
-### 从源码安装
+### 从源码构建
 
 1. 克隆本仓库
-2. 打开 Chrome，访问 `chrome://extensions/`
-3. 开启右上角 **开发者模式**
-4. 点击 **加载已解压的扩展程序**，选择项目根目录
+2. 安装依赖并构建：
+   ```bash
+   npm ci
+   npm run build
+   ```
+3. 打开 Chrome，访问 `chrome://extensions/`
+4. 开启右上角 **开发者模式**
+5. 点击 **加载已解压的扩展程序**，选择 `dist/` 目录
 
 ## 使用方法
 
@@ -105,31 +110,58 @@
 
 ## 技术架构
 
+**技术栈：** React 19 + Ant Design 5 + TypeScript + Zustand + Vite 8 + CRXJS
+
 ```
-DownloadZhihu/
-├── manifest.json                   # Chrome 扩展配置 (Manifest V3)
-├── background.js                   # Service Worker：消息中转、打开导出页面
+src/
+├── manifest.ts                         # CRXJS 扩展清单 (Manifest V3)
+├── background/
+│   └── index.ts                        # Service Worker：消息中转、打开导出页面
 ├── content/
-│   ├── detector.js                 # 页面检测 + 内容提取 + fetch 代理
-│   ├── fetch-bridge.js             # 页面上下文桥接（携带 x-zse 签名）
-│   ├── export-utils.js             # 共享工具：文件名、图片下载、Front Matter
-│   ├── article-panel.js            # 单篇面板 UI + 下载逻辑
-│   ├── collection-panel.js         # 收藏夹/专栏面板（跳转到导出管理器）
-│   └── floating-ui.js              # 主入口：浮动按钮 + 面板调度（Shadow DOM）
+│   ├── index.tsx                       # Content Script 入口：React 渲染
+│   ├── detector.ts                     # 页面检测 + 内容提取 + fetch 代理
+│   ├── fetch-bridge.js                 # 页面上下文桥接（携带 x-zse 签名）
+│   ├── hooks/
+│   │   ├── usePageDetect.ts            # 页面类型检测 Hook
+│   │   └── useFolderHandle.ts          # IndexedDB 文件夹句柄持久化 Hook
+│   └── components/
+│       ├── PanelHost.tsx               # Shadow DOM + Antd StyleProvider 隔离
+│       ├── FloatingButton.tsx          # 可拖拽浮动按钮
+│       ├── ContentApp.tsx              # 面板路由调度
+│       ├── ArticlePanel.tsx            # 单篇导出面板
+│       ├── CollectionPanel.tsx         # 收藏夹面板
+│       └── ColumnPanel.tsx             # 专栏面板
 ├── export/
-│   ├── export.html                 # 导出管理器页面
-│   ├── export.js                   # 导出逻辑：分批导出、评论选择、进度管理
-│   ├── export.css                  # 界面样式
-│   └── compat.js                   # 兼容层
-├── lib/
-│   ├── zhihu-api.js                # 知乎 API 层（收藏夹/专栏/评论）
-│   ├── throttle.js                 # 请求节流 + 403 重试
-│   ├── progress.js                 # 进度文件管理
-│   ├── turndown.js                 # HTML → Markdown 转换库
-│   ├── jszip.min.js                # ZIP 打包库（单篇下载用）
-│   ├── html-to-markdown.js         # 知乎专用转换规则 + 评论格式化
-│   └── pico.min.css                # CSS 框架
-└── icons/                          # 扩展图标
+│   ├── index.html                      # 导出管理器页面
+│   ├── main.tsx                        # 导出管理器入口
+│   ├── export.css                      # 水墨风界面样式
+│   └── components/
+│       ├── ExportManager.tsx           # 主布局
+│       ├── FolderPicker.tsx            # 文件夹选择 + 进度校准
+│       ├── ArticleList.tsx             # 文章批量导出
+│       ├── CommentExport.tsx           # 评论导出（Antd Table）
+│       └── LogPanel.tsx                # 日志面板
+├── shared/
+│   ├── api/
+│   │   ├── zhihu-api.ts                # 知乎 API 层（收藏夹/专栏/评论）
+│   │   ├── proxy-fetch.ts              # Extension Page 代理请求 + 403 重试
+│   │   └── throttle.ts                 # 请求节流
+│   ├── converters/
+│   │   ├── html-to-markdown.ts         # Turndown 自定义规则
+│   │   ├── html-to-docx.ts             # docx 库 + 公式转换
+│   │   └── zhihu-html-utils.ts         # 知乎 HTML 元素识别
+│   ├── stores/
+│   │   ├── uiStore.ts                  # UI 状态（Zustand）
+│   │   └── exportStore.ts              # 导出状态（Zustand）
+│   ├── theme/
+│   │   ├── token.ts                    # Antd 主题配置
+│   │   └── ink-wash.module.css         # 水墨纹理装饰
+│   └── utils/
+│       ├── export-utils.ts             # 文件操作、图片下载、Front Matter
+│       └── progress.ts                 # 进度文件管理
+└── types/
+    ├── zhihu.ts                        # 领域类型定义
+    └── messages.ts                     # 消息协议类型
 ```
 
 ## 权限说明
@@ -144,6 +176,15 @@ DownloadZhihu/
 本扩展不会在后台运行，不会访问其他标签页或浏览数据。
 
 ## 更新日志
+
+### v3.0.0
+
+- **全面重构**：从原生 JavaScript 迁移至 React 19 + Ant Design 5 + TypeScript + Zustand
+- **构建工具**：使用 Vite 8 + CRXJS 插件，支持热更新开发和代码分割
+- **UI 升级**：Content Script 使用 Shadow DOM 隔离样式，导出管理器采用 Ant Design 组件
+- **评论导出表格化**：评论导出改用 Antd Table，支持按收藏时间排序和多选
+- **收藏时间记录**：区分文章创建时间与收藏时间，Front Matter 新增 `collected` 字段
+- **CI 适配**：GitHub Actions release workflow 适配 Vite 构建流程
 
 ### v2.1.3
 
