@@ -282,12 +282,14 @@
   let requestIdCounter = 0;
 
   window.addEventListener('__zhihu_dl_fetch_response', (e) => {
-    const { id, data, error } = e.detail;
+    const { id, data, error, status } = e.detail;
     const pending = pendingRequests.get(id);
     if (pending) {
       pendingRequests.delete(id);
       if (error) {
-        pending.reject(new Error(error));
+        const err = new Error(error);
+        err.httpStatus = status;
+        pending.reject(err);
       } else {
         pending.resolve(data);
       }
@@ -317,7 +319,7 @@
 
     pageFetch(message.url, message.responseType)
       .then((data) => sendResponse({ data }))
-      .catch((err) => sendResponse({ error: err.message }));
+      .catch((err) => sendResponse({ error: err.message, status: err.httpStatus }));
 
     return true;
   });

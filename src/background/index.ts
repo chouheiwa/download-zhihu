@@ -4,25 +4,10 @@
  * 2. Extension Page → content script 代理 API 请求（保持同源）
  */
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === 'openExportPage') {
     chrome.tabs.create({ url: message.url });
     return;
-  }
-
-  if (message.action === 'injectDocxLibs') {
-    (async () => {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: sender.tab.id },
-          files: ['lib/docx.min.js', 'lib/temml.min.js', 'lib/mathml2omml.min.js', 'lib/html-to-docx.js'],
-        });
-        sendResponse({ success: true });
-      } catch (e) {
-        sendResponse({ success: false, error: e.message });
-      }
-    })();
-    return true;
   }
 
   // Extension Page 请求代理
@@ -32,12 +17,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       fetch(message.url, { credentials: 'include' })
         .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then((data) => sendResponse({ ok: true, data }))
-        .catch((err) => sendResponse({ ok: false, error: err.message }));
+        .catch((err: Error) => sendResponse({ ok: false, error: err.message }));
     } else {
       // JSON API 请求：转发给知乎页面的 content script（需要 x-zse 签名）
-      proxyFetchViaContentScript(message.url, message.options, message.responseType)
+      proxyFetchViaContentScript(message.url, message.responseType)
         .then((result) => sendResponse({ ok: true, data: result }))
-        .catch((err) => sendResponse({ ok: false, error: err.message, status: err.httpStatus }));
+        .catch((err: Error & { httpStatus?: number }) => sendResponse({ ok: false, error: err.message, status: err.httpStatus }));
     }
     return true; // 保持 sendResponse 通道
   }
@@ -46,7 +31,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /**
  * 找到一个知乎标签页，让其 content script 发起请求
  */
-async function proxyFetchViaContentScript(url, options, responseType) {
+async function proxyFetchViaContentScript(url: string, responseType?: string): Promise<unknown> {
   // 找到所有知乎标签页
   const tabs = await chrome.tabs.query({
     url: ['https://www.zhihu.com/*', 'https://zhuanlan.zhihu.com/*'],
@@ -60,10 +45,10 @@ async function proxyFetchViaContentScript(url, options, responseType) {
   for (const tab of tabs) {
     try {
       return await new Promise((resolve, reject) => {
+        if (!tab.id) { reject(new Error('no tab id')); return; }
         chrome.tabs.sendMessage(tab.id, {
           action: 'fetchProxy',
           url,
-          options,
           responseType,
         }, (response) => {
           if (chrome.runtime.lastError) {
@@ -75,7 +60,7 @@ async function proxyFetchViaContentScript(url, options, responseType) {
             return;
           }
           if (response.error) {
-            const err = new Error(response.error);
+            const err = new Error(response.error) as Error & { httpStatus?: number };
             err.httpStatus = response.status;
             reject(err);
             return;

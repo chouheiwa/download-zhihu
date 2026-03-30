@@ -1,0 +1,552 @@
+/* ============================================
+   知乎收藏夹导出管理器 — 知乎蓝 · 文雅风
+   Ant Design 样式覆盖 + 原版风格恢复
+   ============================================ */
+
+:root {
+  /* 底色 */
+  --xuan: #F4F6F9;
+  --xuan-deep: #E8ECF1;
+  --xuan-card: #FFFFFF;
+  --xuan-hover: #F8FAFC;
+
+  /* 墨色 */
+  --mo: #1A2332;
+  --mo-light: #3D4D5E;
+  --mo-faint: #7B8A9A;
+  --mo-ghost: #A8B5C4;
+  --mo-trace: #D4DCE5;
+
+  /* 知乎蓝 */
+  --zhu: #0066FF;
+  --zhu-deep: #0052CC;
+  --zhu-light: #E0EDFF;
+  --zhu-glow: rgba(0, 102, 255, 0.08);
+
+  /* 辅助色 */
+  --qing: #2D6A4F;
+  --qing-light: #D8F3DC;
+  --huang: #B8860B;
+  --huang-light: #FFF8E1;
+
+  /* 功能色 */
+  --success: #2D6A4F;
+  --warn: #B8860B;
+  --error: #C03030;
+
+  --radius: 4px;
+  --radius-lg: 8px;
+  --shadow: 0 1px 4px rgba(44, 40, 36, 0.06);
+  --shadow-lg: 0 4px 16px rgba(44, 40, 36, 0.08);
+
+  --font-kai: 'LXGW WenKai', 'Kaiti SC', 'KaiTi', 'STKaiti', serif;
+  --font-song: 'Noto Serif SC', 'Songti SC', 'SimSun', 'STSong', serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---- Base ---- */
+
+html {
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--mo);
+  background: var(--xuan);
+  line-height: 1.7;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ---- App container appear animation ---- */
+
+.export-app {
+  position: relative;
+  z-index: 1;
+  animation: appear 0.6s var(--ease-out) both;
+}
+
+@keyframes appear {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Header ---- */
+
+.app-header {
+  display: flex !important;
+  align-items: center;
+  gap: 1.25rem;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 0;
+}
+
+.header-center {
+  flex: 1;
+}
+
+.app-header .app-title {
+  font-family: var(--font-song) !important;
+  font-weight: 700 !important;
+  font-size: 1.65rem !important;
+  letter-spacing: 0.08em;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+  color: var(--mo) !important;
+}
+
+.app-header .app-subtitle {
+  font-family: var(--font-kai);
+  font-size: 0.88rem;
+  color: var(--mo-faint) !important;
+  margin-top: 0.2rem;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--mo-faint);
+  font-family: var(--font-kai);
+  border: 1px solid var(--mo-trace);
+  padding: 0.3rem 0.8rem;
+  border-radius: 100px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--qing);
+  border-radius: 50%;
+  animation: breathe 2.5s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* ---- Ant Design Card overrides ---- */
+
+.ant-card {
+  background: var(--xuan-card) !important;
+  border: 1px solid var(--mo-trace) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow) !important;
+  transition: box-shadow 0.3s var(--ease), border-color 0.3s !important;
+  animation: cardRise 0.5s var(--ease-out) both;
+}
+
+.ant-card:nth-child(1) { animation-delay: 0.05s; }
+.ant-card:nth-child(2) { animation-delay: 0.1s; }
+.ant-card:nth-child(3) { animation-delay: 0.15s; }
+
+@keyframes cardRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ant-card:hover {
+  box-shadow: var(--shadow-lg) !important;
+  border-color: var(--mo-ghost) !important;
+}
+
+/* Card title — Noto Serif SC + decoration circles */
+.ant-card .ant-card-head {
+  border-bottom: 1px solid var(--mo-trace) !important;
+  padding: 0 1.5rem !important;
+  min-height: auto !important;
+}
+
+.ant-card .ant-card-head-title {
+  font-family: var(--font-song) !important;
+  font-size: 1.08rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em;
+  padding: 1rem 0 !important;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* 标题装饰圆圈 */
+.title-decoration {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--zhu-glow);
+  color: var(--zhu);
+  font-family: var(--font-song);
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid var(--zhu-light);
+}
+
+
+.ant-card .ant-card-body {
+  padding: 1.5rem !important;
+}
+
+/* ---- Ant Design Button overrides ---- */
+
+/* Primary button — 知乎蓝 vermillion style */
+.ant-btn-primary {
+  background: var(--zhu) !important;
+  border-color: var(--zhu) !important;
+  font-family: var(--font-kai) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.15) !important;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s var(--ease) !important;
+}
+
+.ant-btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%);
+  transform: translateX(-100%);
+  transition: transform 0.5s;
+}
+
+.ant-btn-primary:hover:not(:disabled)::before {
+  transform: translateX(100%);
+}
+
+.ant-btn-primary:hover:not(:disabled) {
+  background: var(--zhu-deep) !important;
+  border-color: var(--zhu-deep) !important;
+  box-shadow: 0 4px 16px rgba(0, 102, 255, 0.2) !important;
+}
+
+.ant-btn-primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.ant-btn-primary:disabled {
+  background: var(--mo-trace) !important;
+  border-color: var(--mo-trace) !important;
+  color: var(--mo-ghost) !important;
+  box-shadow: none !important;
+}
+
+/* Default button — ink style */
+.ant-btn-default {
+  background: var(--xuan) !important;
+  color: var(--mo) !important;
+  border: 1px solid var(--mo-trace) !important;
+  font-family: var(--font-kai) !important;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  transition: all 0.2s var(--ease) !important;
+}
+
+.ant-btn-default:hover:not(:disabled) {
+  background: var(--xuan-deep) !important;
+  border-color: var(--mo-ghost) !important;
+  color: var(--mo) !important;
+}
+
+.ant-btn-default:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ---- Ant Design Checkbox overrides ---- */
+
+.ant-checkbox .ant-checkbox-inner {
+  border-color: var(--mo-trace) !important;
+  border-radius: 3px !important;
+  transition: all 0.2s var(--ease) !important;
+}
+
+.ant-checkbox-checked .ant-checkbox-inner {
+  background-color: var(--zhu) !important;
+  border-color: var(--zhu) !important;
+}
+
+.ant-checkbox-wrapper {
+  font-family: var(--font-kai);
+  color: var(--mo-light);
+}
+
+/* ---- Ant Design Radio overrides ---- */
+
+.ant-radio-wrapper {
+  font-family: var(--font-kai);
+  color: var(--mo-light);
+}
+
+.ant-radio-checked .ant-radio-inner {
+  border-color: var(--zhu) !important;
+}
+
+.ant-radio-checked .ant-radio-inner::after {
+  background-color: var(--zhu) !important;
+}
+
+/* ---- Ant Design Progress overrides ---- */
+
+.ant-progress .ant-progress-bg {
+  background: linear-gradient(90deg, var(--zhu), #3D8BFF) !important;
+}
+
+/* ---- Ant Design Typography overrides ---- */
+
+.ant-typography {
+  color: var(--mo) !important;
+}
+
+.ant-typography.ant-typography-secondary {
+  color: var(--mo-faint) !important;
+}
+
+/* ---- Folder display ---- */
+
+.folder-display {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.9rem;
+  background: var(--xuan);
+  border: 1px dashed var(--mo-trace);
+  border-radius: var(--radius);
+  transition: border-color 0.2s;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--mo-ghost);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-display:hover {
+  border-color: var(--mo-ghost);
+}
+
+/* ---- Comment article list items ---- */
+
+.comment-article-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius);
+  transition: background 0.15s;
+  cursor: pointer;
+  user-select: none;
+}
+
+.comment-article-item:hover {
+  background: var(--xuan-deep);
+}
+
+.comment-article-item .item-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--mo-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Log Panel dark theme ---- */
+
+.log-panel-card.ant-card {
+  background: var(--mo) !important;
+  border-color: var(--mo-light) !important;
+  animation-delay: 0.2s;
+}
+
+.log-panel-card .ant-card-head {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.log-panel-card .ant-card-head-title {
+  color: var(--mo-ghost) !important;
+  font-family: var(--font-kai) !important;
+  font-size: 0.92rem !important;
+}
+
+.log-panel-card .title-decoration {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--mo-ghost);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.log-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  line-height: 1.8;
+  color: #C7C2B8;
+  padding-top: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: #4A4540 var(--mo);
+}
+
+.log-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.log-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.log-scroll::-webkit-scrollbar-thumb {
+  background: #4A4540;
+  border-radius: 2px;
+}
+
+.log-scroll .log-entry {
+  padding: 0.1rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  animation: logIn 0.2s var(--ease-out) both;
+}
+
+@keyframes logIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.log-scroll .log-time {
+  color: #6B6560;
+  margin-right: 0.5rem;
+}
+
+.log-scroll .log-warn {
+  color: #E9C46A;
+}
+
+.log-scroll .log-error {
+  color: #E76F51;
+}
+
+.log-scroll .log-success {
+  color: #81B29A;
+}
+
+/* ---- Footer ---- */
+
+.app-footer {
+  margin-top: 2.5rem;
+  text-align: center;
+  padding-bottom: 2rem;
+}
+
+.footer-line {
+  width: 40px;
+  height: 2px;
+  background: var(--zhu);
+  margin: 0 auto 0.75rem;
+  border-radius: 1px;
+  opacity: 0.4;
+}
+
+.app-footer p {
+  font-family: var(--font-kai);
+  font-size: 0.78rem;
+  color: var(--mo-ghost);
+  letter-spacing: 0.15em;
+}
+
+/* ---- Note/helper text ---- */
+
+.note-text {
+  font-size: 0.75rem;
+  color: var(--mo-ghost);
+  font-family: var(--font-kai);
+  line-height: 1.5;
+}
+
+/* ---- Status text ---- */
+
+.status-text {
+  font-size: 0.88rem;
+  color: var(--mo-light);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Export grid ---- */
+
+.export-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.export-grid .ant-card {
+  margin-bottom: 0;
+}
+
+/* Comment card spans full width */
+.export-grid .comment-card {
+  grid-column: 1 / -1;
+}
+
+/* ---- Scrollable list areas ---- */
+
+.scrollable-list {
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mo-trace) transparent;
+}
+
+.scrollable-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb {
+  background: var(--mo-trace);
+  border-radius: 2px;
+}
+
+/* ---- Ant Design Tag override ---- */
+
+.ant-tag-green {
+  color: var(--qing) !important;
+  background: var(--qing-light) !important;
+  border-color: var(--qing) !important;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 700px) {
+  .export-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-header {
+    flex-wrap: wrap;
+    padding: 1.5rem 1rem 0;
+  }
+
+  .app-header .app-title {
+    font-size: 1.35rem !important;
+  }
+
+  .ant-card .ant-card-body {
+    padding: 1rem !important;
+  }
+
+  .ant-card .ant-card-head {
+    padding: 0 1rem !important;
+  }
+}

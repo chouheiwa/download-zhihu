@@ -263,6 +263,16 @@
 
     articleLog(refs, `开始导出: type=${data.type}, title="${data.title}", author="${data.author}"`);
     articleLog(refs, `内容来源: ${data._source || '未知'}`);
+
+    // 设置 403 重试回调，让用户看到等待信息
+    const throttle = window.__throttle;
+    if (throttle) {
+      throttle.setOnRetry((retryCount, maxRetries, waitMs) => {
+        const waitSec = Math.round(waitMs / 1000);
+        refs.btn.textContent = `被限流，等待 ${waitSec}s 后重试（${retryCount}/${maxRetries}）...`;
+        articleLog(refs, `请求被限制，等待 ${waitSec} 秒后重试（${retryCount}/${maxRetries}）...`, 'warn');
+      });
+    }
     // 计算 HTML 纯文本长度用于对比
     const tmpDiv = document.createElement('div');
     tmpDiv.innerHTML = data.html || '';

@@ -1,0 +1,105 @@
+/* ============================================
+   水墨纹理装饰 CSS Module
+   Visual texture/decoration effects only.
+   Layout and component styles are handled by Antd.
+   ============================================ */
+
+/* Overall page background */
+.inkWashBg {
+  background: #F4F6F9;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Decorative ink splash #1 — top-right corner */
+.inkWash1 {
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.035;
+  width: 600px;
+  height: 600px;
+  top: -200px;
+  right: -100px;
+  background: radial-gradient(circle, #1a2332 0%, transparent 70%);
+}
+
+/* Decorative ink splash #2 — bottom-left corner */
+.inkWash2 {
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.035;
+  width: 400px;
+  height: 400px;
+  bottom: -100px;
+  left: -80px;
+  background: radial-gradient(circle, #0066ff 0%, transparent 70%);
+}
+
+/* SVG noise filter overlay — rice paper texture */
+.ricePaperTexture {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+}
+
+/* Red seal stamp decoration */
+.sealMark {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0066ff;
+  color: #ffffff;
+  font-family: 'Noto Serif SC', 'Songti SC', 'SimSun', 'STSong', serif;
+  font-weight: 900;
+  font-size: 1.6rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+  box-shadow: 2px 2px 0 rgba(0, 102, 255, 0.15);
+  transform: rotate(-2deg);
+  user-select: none;
+  letter-spacing: 0;
+  line-height: 1;
+  /* Seal wear effect */
+  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.06' numOctaves='3'/%3E%3CfeColorMatrix type='luminanceToAlpha'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='0 1 1 1 1 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.06' numOctaves='3'/%3E%3CfeColorMatrix type='luminanceToAlpha'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='0 1 1 1 1 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Section divider with ornament */
+.dividerInk {
+  text-align: center;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.dividerInk::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #D4DCE5, transparent);
+}
+
+.dividerOrnament {
+  position: relative;
+  z-index: 1;
+  background: #F4F6F9;
+  padding: 0 1rem;
+  font-size: 0.7rem;
+  color: #a8b5c4;
+  letter-spacing: 0.5em;
+}
