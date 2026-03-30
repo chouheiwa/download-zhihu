@@ -20,6 +20,8 @@ export interface ContentItem {
   commentCount: number;
   created_time: number;
   updated_time: number;
+  /** 收藏时间（仅收藏夹条目有此字段） */
+  collected_time?: number;
 }
 
 /** 从当前页面提取的文章/回答内容 */

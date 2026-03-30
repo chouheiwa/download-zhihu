@@ -98,6 +98,8 @@ export function buildFrontmatter(data: ExtractedContent | ContentItem): string {
 
   if (created) lines.push(`created: "${created}"`);
   if (updated) lines.push(`updated: "${updated}"`);
+  const collected = _formatTimestamp((d as ContentItem).collected_time ?? undefined);
+  if (collected) lines.push(`collected: "${collected}"`);
   lines.push(`downloaded: "${new Date().toISOString().split('T')[0]}"`);
   lines.push('---', '');
   return lines.join('\n');

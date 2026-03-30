@@ -75,10 +75,13 @@ export async function fetchCollectionPage(apiUrl: string): Promise<PaginatedResu
 
   const data = await response.json() as any;
   const paging = data.paging || {};
-  // 收藏夹的 item.content 是实际内容对象
-  const items: ContentItem[] = (data.data || []).map((item: any) =>
-    parseContentItem(item.content || {}, item.created_time || 0)
-  );
+  // 收藏夹的 item.content 是实际内容对象，item.created 是收藏时间（ISO 字符串）
+  const items: ContentItem[] = (data.data || []).map((item: any) => {
+    const collectedTime = item.created
+      ? Math.floor(new Date(item.created).getTime() / 1000)
+      : 0;
+    return parseContentItem(item.content || {}, collectedTime);
+  });
 
   return {
     items,
@@ -140,6 +143,7 @@ export function parseContentItem(c: any, createdTime: number): ContentItem {
     commentCount: c.comment_count || 0,
     created_time: c.created_time || c.created || createdTime,
     updated_time: c.updated_time || c.updated || 0,
+    collected_time: createdTime || undefined,
   };
 }
 

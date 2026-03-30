@@ -113,6 +113,7 @@ async function reconcileProgress(
           const sourceMatch = head.match(/^source:\s*"([^"]+)"/m);
           const createdMatch = head.match(/^created:\s*"(\d{4}-\d{2}-\d{2}[^"]*)"/m);
           const updatedMatch = head.match(/^updated:\s*"(\d{4}-\d{2}-\d{2}[^"]*)"/m);
+          const collectedMatch = head.match(/^collected:\s*"(\d{4}-\d{2}-\d{2}[^"]*)"/m);
           fileItems.push({
             id: articleId,
             title: titleMatch ? titleMatch[1].replace(/\\"/g, '"') : '',
@@ -125,6 +126,7 @@ async function reconcileProgress(
             commentCount: 0,
             created_time: createdMatch ? Math.floor(new Date(createdMatch[1]).getTime() / 1000) : 0,
             updated_time: updatedMatch ? Math.floor(new Date(updatedMatch[1]).getTime() / 1000) : 0,
+            collected_time: collectedMatch ? Math.floor(new Date(collectedMatch[1]).getTime() / 1000) : undefined,
           });
         }
       } catch { /* skip */ }

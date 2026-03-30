@@ -26,7 +26,7 @@
         error = 'HTTP ' + response.status;
       }
       window.dispatchEvent(new CustomEvent('__zhihu_dl_fetch_response', {
-        detail: { id: detail.id, data: data, error: error }
+        detail: { id: detail.id, data: data, error: error, status: response.status }
       }));
     } catch(err) {
       window.dispatchEvent(new CustomEvent('__zhihu_dl_fetch_response', {

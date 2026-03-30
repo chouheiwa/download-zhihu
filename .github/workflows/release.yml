@@ -18,31 +18,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: Verify manifest version matches tag
         run: |
-          MANIFEST_VERSION=$(grep -o '"version": "[^"]*"' manifest.json | grep -o '[0-9][^"]*')
+          MANIFEST_VERSION=$(grep -oP "version:\s*'(\K[^']+)" src/manifest.ts)
           TAG_VERSION=${{ steps.version.outputs.VERSION }}
           if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::manifest.json version ($MANIFEST_VERSION) does not match tag (v$TAG_VERSION)"
+            echo "::error::src/manifest.ts version ($MANIFEST_VERSION) does not match tag (v$TAG_VERSION)"
             exit 1
           fi
+
+      - name: Build extension
+        run: npm run build
 
       - name: Build ZIP
         id: build
         run: |
           ZIP_NAME="DownloadZhihu-v${{ steps.version.outputs.VERSION }}.zip"
-          zip -r "$ZIP_NAME" \
-            manifest.json \
-            background.js \
-            content/ \
-            export/ \
-            lib/ \
-            icons/ \
-            -x "*.DS_Store"
+          cd dist
+          zip -r "../$ZIP_NAME" . -x "*.DS_Store"
+          cd ..
           echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact

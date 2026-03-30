@@ -825,6 +825,10 @@
 
           await progress.updateCommentProgress(dirHandle, collectionId, progressData, item.id);
         } catch (err) {
+          if (err.httpStatus === 403 || err.message?.includes('403')) {
+            log(`⚠️ 被知乎限流（HTTP 403），可能需要完成验证码。请切换到知乎页面完成验证后重试剩余文章。已处理 ${i + 1}/${selected.length} 篇`, 'error');
+            break;
+          }
           log(`${displayTitle} 评论导出失败: ${err.message}`, 'error');
         }
       }

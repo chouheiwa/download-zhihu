@@ -37,7 +37,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // JSON API 请求：转发给知乎页面的 content script（需要 x-zse 签名）
       proxyFetchViaContentScript(message.url, message.options, message.responseType)
         .then((result) => sendResponse({ ok: true, data: result }))
-        .catch((err) => sendResponse({ ok: false, error: err.message }));
+        .catch((err) => sendResponse({ ok: false, error: err.message, status: err.httpStatus }));
     }
     return true; // 保持 sendResponse 通道
   }
@@ -75,7 +75,9 @@ async function proxyFetchViaContentScript(url, options, responseType) {
             return;
           }
           if (response.error) {
-            reject(new Error(response.error));
+            const err = new Error(response.error);
+            err.httpStatus = response.status;
+            reject(err);
             return;
           }
           resolve(response.data);
