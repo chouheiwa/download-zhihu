@@ -4,6 +4,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DEFAULT_OUT_DIR = 'exports';
+const ANSWER_INCLUDE = 'data[*].content,excerpt,created_time,updated_time,voteup_count,comment_count,question,author';
+const ARTICLE_INCLUDE = 'data[*].content,excerpt,created,updated,voteup_count,comment_count,author';
 
 function printUsage() {
   console.log(`Usage:
@@ -16,11 +18,13 @@ Options:
   --cookie <cookie>    Raw Cookie header for pages that need login
   --cookie-file <file> Read raw Cookie header from a file
   --no-images          Do not download article images
+  --max-pages <n>      Only fetch the first n API pages for smoke testing
   --help               Show this help
 
 Examples:
   npm run export:local -- https://zhuanlan.zhihu.com/p/123456
   npm run export:local -- https://www.zhihu.com/collection/825550242 --out ./zhihu-export
+  npm run export:local -- https://www.zhihu.com/people/mr-dang-77/answers --out ./zhihu-export
   npm run export:local -- --input urls.txt --out ./zhihu-export
 `);
 }
@@ -31,6 +35,7 @@ function parseArgs(argv) {
     inputFile: '',
     cookie: '',
     downloadImages: true,
+    maxPages: 0,
     urls: [],
     help: false,
   };
@@ -43,6 +48,7 @@ function parseArgs(argv) {
     else if (arg === '--cookie') opts.cookie = argv[++i] || '';
     else if (arg === '--cookie-file') opts.cookieFile = argv[++i] || '';
     else if (arg === '--no-images') opts.downloadImages = false;
+    else if (arg === '--max-pages') opts.maxPages = Number(argv[++i] || 0);
     else if (arg.startsWith('--')) throw new Error(`Unknown option: ${arg}`);
     else opts.urls.push(arg);
   }
@@ -57,12 +63,16 @@ function detectPage(url) {
     { type: 'question', regex: /zhihu\.com\/question\/(\d+)\/?(\?|$|#)/ },
     { type: 'pin', regex: /zhihu\.com\/pin\/(\d+)/ },
     { type: 'collection', regex: /zhihu\.com\/collection\/(\d+)/ },
+    { type: 'profile', regex: /zhihu\.com\/people\/([^/?#]+)\/(answers|posts|columns)\/?/ },
+    { type: 'profile', regex: /zhihu\.com\/people\/([^/?#]+)\/?(\?|$|#)/ },
   ];
 
   for (const { type, regex } of patterns) {
     const match = url.match(regex);
     if (match) {
-      return { type, id: type === 'answer' ? match[2] : match[1] };
+      if (type === 'answer') return { type, id: match[2] };
+      if (type === 'profile') return { type, id: match[1], section: match[2] && !['?', '#'].includes(match[2]) ? match[2] : 'all' };
+      return { type, id: match[1] };
     }
   }
   return null;
@@ -76,6 +86,14 @@ function sanitizeFilename(name) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 100) || '知乎内容';
+}
+
+function cleanDisplayText(text) {
+  return String(text || '')
+    .replace(/\.css-[^{\s]+{[^}]+}/g, '')
+    .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function formatTimestamp(ts) {
@@ -116,6 +134,7 @@ function buildItemName(item, num) {
     answer: '回答',
     question: '问题',
     pin: '想法',
+    column: '专栏',
   };
   const typeLabel = typeLabels[item.type] || item.type || '内容';
   if (item.type === 'article') return item.title || `${item.author}的文章_${num}`;
@@ -315,6 +334,70 @@ function parseContentItem(rawItem) {
   };
 }
 
+function parseApiContentItem(c, fallbackType = '') {
+  const type = c.type || fallbackType || 'unknown';
+
+  if (type === 'answer') {
+    const questionId = c.question?.id || '';
+    const answerId = c.id || '';
+    return {
+      id: String(answerId || c.url || Math.random()),
+      type,
+      url: c.url || (questionId && answerId ? `https://www.zhihu.com/question/${questionId}/answer/${answerId}` : ''),
+      title: c.question?.title || `知乎回答${answerId}`,
+      author: c.author?.name || '知乎用户',
+      html: c.content || c.excerpt || '',
+      isTruncated: !!c.content_need_truncated,
+      isPaidContent: c.is_free === 0,
+      createdTime: c.created_time || c.created || 0,
+      updatedTime: c.updated_time || c.updated || 0,
+    };
+  }
+
+  if (type === 'article') {
+    const id = c.id || '';
+    return {
+      id: String(id || c.url || Math.random()),
+      type,
+      url: c.url || (id ? `https://zhuanlan.zhihu.com/p/${id}` : ''),
+      title: c.title || `知乎文章${id}`,
+      author: c.author?.name || '知乎用户',
+      html: c.content || c.excerpt || '',
+      isTruncated: !!c.content_need_truncated,
+      isPaidContent: c.is_free === 0,
+      createdTime: c.created_time || c.created || 0,
+      updatedTime: c.updated_time || c.updated || 0,
+    };
+  }
+
+  if (type === 'column') {
+    const id = c.url_token || c.id || c.slug || '';
+    return {
+      id: String(id || c.url || Math.random()),
+      type,
+      url: c.url || (id ? `https://www.zhihu.com/column/${id}` : ''),
+      title: c.title || c.name || `知乎专栏${id}`,
+      author: c.author?.name || c.creator?.name || '知乎用户',
+      html: c.intro || c.description || '',
+      createdTime: c.created_time || c.created || 0,
+      updatedTime: c.updated_time || c.updated || 0,
+    };
+  }
+
+  return {
+    id: String(c.id || c.url || Math.random()),
+    type,
+    url: c.url || '',
+    title: c.title || '',
+    author: c.author?.name || '知乎用户',
+    html: c.content || c.excerpt || '',
+    isTruncated: !!c.content_need_truncated,
+    isPaidContent: c.is_free === 0,
+    createdTime: c.created_time || c.created || 0,
+    updatedTime: c.updated_time || c.updated || 0,
+  };
+}
+
 function getCollectionTitle(document, id) {
   const titleEl =
     document.querySelector('.CollectionDetailPageHeader-title') ||
@@ -324,6 +407,23 @@ function getCollectionTitle(document, id) {
   if (title) return title;
   const pageTitle = (document.title || '').replace(/^\(\d+\s*条消息\)\s*/, '').split(' - ')[0].trim();
   return pageTitle || `收藏夹${id}`;
+}
+
+function getProfileName(document, token) {
+  const metaTitle =
+    document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+    document.querySelector('meta[name="title"]')?.getAttribute('content');
+  const cleanMetaTitle = cleanDisplayText(metaTitle || '').replace(/\s*-\s*知乎$/, '');
+  if (cleanMetaTitle) return cleanMetaTitle;
+
+  const nameEl =
+    document.querySelector('.ProfileHeader-name') ||
+    document.querySelector('[class*="ProfileHeader"] h1') ||
+    document.querySelector('h1');
+  const name = cleanDisplayText(nameEl?.textContent || '');
+  if (name) return name;
+  const pageTitle = cleanDisplayText(document.title || '').replace(/^\(\d+\s*条消息\)\s*/, '').split(' - ')[0].trim();
+  return pageTitle || token;
 }
 
 function getImageUrl(img) {
@@ -480,7 +580,10 @@ async function htmlToMarkdown(html, JSDOM, TurndownService, sourceUrl, opts) {
 async function fetchHtml(url, headers) {
   const response = await fetch(url, { headers, redirect: 'follow' });
   if (!response.ok) {
-    throw new Error(`请求失败: HTTP ${response.status}`);
+    const hint = response.status === 403 || response.status === 401
+      ? '，可能需要传入登录 Cookie，例如 --cookie-file ./cookie.txt'
+      : '';
+    throw new Error(`请求失败: HTTP ${response.status}${hint}`);
   }
   return await response.text();
 }
@@ -566,7 +669,7 @@ async function exportSinglePage(url, deps, opts) {
   });
 }
 
-function buildTocMarkdown(collectionName, entries) {
+function buildTocMarkdown(collectionName, entries, linkPrefix = './articles/') {
   const lines = [
     `# ${collectionName}`,
     '',
@@ -574,9 +677,12 @@ function buildTocMarkdown(collectionName, entries) {
     '',
   ];
   for (const entry of entries) {
-    const encoded = encodeURIComponent(entry.filename).replace(/\(/g, '%28').replace(/\)/g, '%29');
+    const encoded = entry.filename
+      .split('/')
+      .map((part) => encodeURIComponent(part).replace(/\(/g, '%28').replace(/\)/g, '%29'))
+      .join('/');
     const title = entry.title.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-    lines.push(`${entry.num}. [${title}](./articles/${encoded}) - ${entry.author}（${entry.type}）`);
+    lines.push(`${entry.num}. [${title}](${linkPrefix}${encoded}) - ${entry.author}（${entry.type}）`);
   }
   lines.push('');
   return lines.join('\n');
@@ -592,6 +698,135 @@ async function fetchCollectionPage(apiUrl, opts) {
   };
 }
 
+async function fetchMemberAnswersPage(apiUrl, opts) {
+  const data = await fetchJson(apiUrl, opts.headers);
+  const paging = data.paging || {};
+  return {
+    items: (data.data || []).map((item) => parseApiContentItem(item, 'answer')),
+    nextUrl: paging.is_end ? null : fixHttpUrl(paging.next),
+    totals: paging.totals || 0,
+  };
+}
+
+async function fetchMemberArticlesPage(apiUrl, opts) {
+  const data = await fetchJson(apiUrl, opts.headers);
+  const paging = data.paging || {};
+  return {
+    items: (data.data || []).map((item) => parseApiContentItem(item, 'article')),
+    nextUrl: paging.is_end ? null : fixHttpUrl(paging.next),
+    totals: paging.totals || 0,
+  };
+}
+
+async function fetchMemberColumnsPage(apiUrl, opts) {
+  const data = await fetchJson(apiUrl, opts.headers);
+  const paging = data.paging || {};
+  return {
+    items: (data.data || []).map((item) => parseApiContentItem(item.column || item.target || item, 'column')),
+    nextUrl: paging.is_end ? null : fixHttpUrl(paging.next),
+    totals: paging.totals || 0,
+  };
+}
+
+async function tryFetchMemberColumnsPage(apiUrl, opts) {
+  try {
+    return await fetchMemberColumnsPage(apiUrl, opts);
+  } catch (err) {
+    if (!/HTTP 404/.test(err.message || '')) throw err;
+    return null;
+  }
+}
+
+function extractColumnsFromProfileHtml(html) {
+  const match = html.match(/<script\s+id="js-initialData"\s+type="text\/json">([^<]+)<\/script>/);
+  if (!match) return [];
+  try {
+    const data = JSON.parse(match[1]);
+    const columns = data?.initialState?.entities?.columns || {};
+    return Object.values(columns).map((column) => parseApiContentItem(column, 'column'));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchColumnItemsPage(apiUrl, opts) {
+  const data = await fetchJson(apiUrl, opts.headers);
+  const paging = data.paging || {};
+  return {
+    items: (data.data || []).map((item) => parseApiContentItem(item, item.type || 'article')),
+    nextUrl: paging.is_end ? null : fixHttpUrl(paging.next),
+    totals: paging.totals || 0,
+  };
+}
+
+async function exportItemsToDirectory(items, dir, title, deps, opts, state = { exported: 0, usedNames: new Set(), entries: [] }) {
+  const articlesDir = path.join(dir, 'articles');
+  await mkdir(articlesDir, { recursive: true });
+
+  const startExported = state.exported || 0;
+  let failed = 0;
+  state.usedNames ||= new Set();
+  state.entries ||= [];
+
+  for (const item of items) {
+    if (!item.id || !['article', 'answer', 'question', 'pin'].includes(item.type)) {
+      console.warn(`  跳过不支持条目: ${item.title || item.id || 'unknown'} (${item.type})`);
+      continue;
+    }
+
+    try {
+      let content = item;
+      if ((!content.html || content.isTruncated) && content.url) {
+        const full = await fetchFullContentFromPage(content, deps, opts);
+        if (full && (full.html || '').length > (content.html || '').length) {
+          content = {
+            ...content,
+            ...full,
+            collectedTime: item.collectedTime,
+            createdTime: full.createdTime || item.createdTime,
+            updatedTime: full.updatedTime || item.updatedTime,
+          };
+        }
+      }
+
+      if (!content.html) {
+        throw new Error('正文为空');
+      }
+
+      const num = state.exported + 1;
+      let baseName = sanitizeFilename(buildItemName(content, num));
+      if (state.usedNames.has(baseName)) baseName = `${baseName}_${num}`;
+      state.usedNames.add(baseName);
+
+      const result = await exportContent(content, deps, {
+        ...opts,
+        outDir: articlesDir,
+        num,
+        baseName,
+      });
+      state.exported++;
+      state.entries.push({
+        num: state.exported,
+        title: content.title || baseName,
+        author: content.author || '知乎用户',
+        type: content.type,
+        filename: result.filename,
+      });
+
+      const imageNote = opts.downloadImages
+        ? `，图片 ${result.imageStats.ok}/${result.imageStats.total}`
+        : '';
+      console.log(`    [${state.exported}] ${result.filename}${imageNote}`);
+    } catch (err) {
+      failed++;
+      console.error(`    失败: ${item.title || item.id} (${err.message})`);
+    }
+  }
+
+  await writeFile(path.join(dir, 'README.md'), buildTocMarkdown(title, state.entries), 'utf8');
+  return { exported: state.exported - startExported, failed, entries: state.entries, state };
+}
+
 async function exportCollection(url, deps, opts) {
   const pageInfo = detectPage(url);
   if (!pageInfo || pageInfo.type !== 'collection') {
@@ -602,83 +837,214 @@ async function exportCollection(url, deps, opts) {
   const dom = new deps.JSDOM(collectionHtml, { url });
   const collectionName = getCollectionTitle(dom.window.document, pageInfo.id);
   const collectionDir = path.join(opts.outDir, sanitizeFilename(collectionName));
-  const articlesDir = path.join(collectionDir, 'articles');
-  await mkdir(articlesDir, { recursive: true });
+  await mkdir(collectionDir, { recursive: true });
 
   console.log(`  收藏夹: ${collectionName} (#${pageInfo.id})`);
   let nextUrl = `https://www.zhihu.com/api/v4/collections/${pageInfo.id}/items?offset=0&limit=20`;
   let pageNum = 0;
-  let exported = 0;
-  let failed = 0;
-  const usedNames = new Set();
-  const tocEntries = [];
+  let totalFailed = 0;
+  const state = { exported: 0, usedNames: new Set(), entries: [] };
 
   while (nextUrl) {
+    if (opts.maxPages && pageNum >= opts.maxPages) break;
     pageNum++;
     console.log(`  读取目录第 ${pageNum} 页...`);
     const page = await fetchCollectionPage(nextUrl, opts);
     console.log(`  第 ${pageNum} 页 ${page.items.length} 条${page.totals ? `，总数约 ${page.totals}` : ''}`);
-
-    for (const item of page.items) {
-      if (!item.id || !['article', 'answer', 'question', 'pin'].includes(item.type)) {
-        console.warn(`  跳过不支持条目: ${item.title || item.id || 'unknown'} (${item.type})`);
-        continue;
-      }
-
-      try {
-        let content = item;
-        if ((!content.html || content.isTruncated) && content.url) {
-          const full = await fetchFullContentFromPage(content, deps, opts);
-          if (full && (full.html || '').length > (content.html || '').length) {
-            content = {
-              ...content,
-              ...full,
-              collectedTime: item.collectedTime,
-              createdTime: full.createdTime || item.createdTime,
-              updatedTime: full.updatedTime || item.updatedTime,
-            };
-          }
-        }
-
-        if (!content.html) {
-          throw new Error('正文为空');
-        }
-
-        const num = exported + 1;
-        let baseName = sanitizeFilename(buildItemName(content, num));
-        if (usedNames.has(baseName)) baseName = `${baseName}_${num}`;
-        usedNames.add(baseName);
-
-        const result = await exportContent(content, deps, {
-          ...opts,
-          outDir: articlesDir,
-          num,
-          baseName,
-        });
-        exported++;
-        tocEntries.push({
-          num: exported,
-          title: content.title || baseName,
-          author: content.author || '知乎用户',
-          type: content.type,
-          filename: result.filename,
-        });
-
-        const imageNote = opts.downloadImages
-          ? `，图片 ${result.imageStats.ok}/${result.imageStats.total}`
-          : '';
-        console.log(`    [${exported}] ${result.filename}${imageNote}`);
-      } catch (err) {
-        failed++;
-        console.error(`    失败: ${item.title || item.id} (${err.message})`);
-      }
-    }
+    const result = await exportItemsToDirectory(page.items, collectionDir, collectionName, deps, opts, state);
+    totalFailed += result.failed;
 
     nextUrl = page.nextUrl;
   }
 
-  await writeFile(path.join(collectionDir, 'README.md'), buildTocMarkdown(collectionName, tocEntries), 'utf8');
-  return { outputPath: collectionDir, exported, failed };
+  return { outputPath: collectionDir, exported: state.exported, failed: totalFailed };
+}
+
+async function exportPagedItems({ initialUrl, fetchPage, outputDir, title, deps, opts }) {
+  await mkdir(outputDir, { recursive: true });
+  let nextUrl = initialUrl;
+  let pageNum = 0;
+  let failed = 0;
+  const state = { exported: 0, usedNames: new Set(), entries: [] };
+
+  while (nextUrl) {
+    if (opts.maxPages && pageNum >= opts.maxPages) break;
+    pageNum++;
+    console.log(`  读取 ${title} 第 ${pageNum} 页...`);
+    const page = await fetchPage(nextUrl, opts);
+    console.log(`  第 ${pageNum} 页 ${page.items.length} 条${page.totals ? `，总数约 ${page.totals}` : ''}`);
+    const result = await exportItemsToDirectory(page.items, outputDir, title, deps, opts, state);
+    failed += result.failed;
+    nextUrl = page.nextUrl;
+  }
+
+  return { outputPath: outputDir, exported: state.exported, failed };
+}
+
+async function exportMemberAnswers(token, profileDir, profileName, deps, opts) {
+  const outputDir = path.join(profileDir, '回答');
+  const apiUrl = `https://www.zhihu.com/api/v4/members/${encodeURIComponent(token)}/answers?offset=0&limit=20&sort_by=created&include=${encodeURIComponent(ANSWER_INCLUDE)}`;
+  return await exportPagedItems({
+    initialUrl: apiUrl,
+    fetchPage: fetchMemberAnswersPage,
+    outputDir,
+    title: `${profileName} - 回答`,
+    deps,
+    opts,
+  });
+}
+
+async function exportMemberArticles(token, profileDir, profileName, deps, opts) {
+  const outputDir = path.join(profileDir, '文章');
+  const apiUrl = `https://www.zhihu.com/api/v4/members/${encodeURIComponent(token)}/articles?offset=0&limit=20&sort_by=created&include=${encodeURIComponent(ARTICLE_INCLUDE)}`;
+  return await exportPagedItems({
+    initialUrl: apiUrl,
+    fetchPage: fetchMemberArticlesPage,
+    outputDir,
+    title: `${profileName} - 文章`,
+    deps,
+    opts,
+  });
+}
+
+async function exportSingleColumn(column, columnsDir, deps, opts) {
+  const columnName = sanitizeFilename(column.title || column.id);
+  const outputDir = path.join(columnsDir, columnName);
+  const apiUrl = `https://www.zhihu.com/api/v4/columns/${encodeURIComponent(column.id)}/items`;
+  return await exportPagedItems({
+    initialUrl: apiUrl,
+    fetchPage: fetchColumnItemsPage,
+    outputDir,
+    title: column.title || column.id,
+    deps,
+    opts,
+  });
+}
+
+async function exportMemberColumns(token, profileDir, profileName, deps, opts) {
+  const columnsDir = path.join(profileDir, '专栏');
+  await mkdir(columnsDir, { recursive: true });
+  let pageNum = 0;
+  let exported = 0;
+  let failed = 0;
+  const columnEntries = [];
+  const columns = [];
+  const candidateUrls = [
+    `https://www.zhihu.com/api/v4/members/${encodeURIComponent(token)}/columns?offset=0&limit=20`,
+    `https://www.zhihu.com/api/v4/members/${encodeURIComponent(token)}/column-contributions?offset=0&limit=20`,
+    `https://www.zhihu.com/api/v4/members/${encodeURIComponent(token)}/following-columns?offset=0&limit=20`,
+  ];
+
+  for (const candidate of candidateUrls) {
+    let nextUrl = candidate;
+    pageNum = 0;
+    while (nextUrl) {
+      if (opts.maxPages && pageNum >= opts.maxPages) break;
+      pageNum++;
+      const page = await tryFetchMemberColumnsPage(nextUrl, opts);
+      if (!page) break;
+      console.log(`  读取 ${profileName} 的专栏第 ${pageNum} 页...`);
+      console.log(`  第 ${pageNum} 页 ${page.items.length} 个专栏${page.totals ? `，总数约 ${page.totals}` : ''}`);
+      columns.push(...page.items);
+      nextUrl = page.nextUrl;
+    }
+    if (columns.length > 0) break;
+  }
+
+  if (columns.length === 0) {
+    try {
+      const columnsHtml = await fetchHtml(`https://www.zhihu.com/people/${token}/columns`, opts.headers);
+      columns.push(...extractColumnsFromProfileHtml(columnsHtml));
+      if (columns.length > 0) {
+        console.log(`  从页面 initialData 读取到 ${columns.length} 个专栏`);
+      }
+    } catch (err) {
+      console.warn(`  专栏页面读取失败: ${err.message}`);
+    }
+  }
+
+  const uniqueColumns = [];
+  const seen = new Set();
+  for (const column of columns) {
+    const key = column.id || column.url || column.title;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueColumns.push(column);
+  }
+
+  if (uniqueColumns.length === 0) {
+    console.warn('  未读取到专栏列表，跳过专栏导出');
+  }
+
+  for (const column of uniqueColumns) {
+    try {
+      console.log(`  导出专栏: ${column.title || column.id}`);
+      const result = await exportSingleColumn(column, columnsDir, deps, opts);
+      exported += result.exported;
+      failed += result.failed;
+      columnEntries.push({
+        num: columnEntries.length + 1,
+        title: column.title || column.id,
+        author: column.author || '知乎用户',
+        type: `专栏/${result.exported}篇`,
+        filename: `${sanitizeFilename(column.title || column.id)}/README.md`,
+      });
+    } catch (err) {
+      failed++;
+      console.error(`    专栏导出失败: ${column.title || column.id} (${err.message})`);
+    }
+  }
+
+  await writeFile(path.join(columnsDir, 'README.md'), buildTocMarkdown(`${profileName} - 专栏`, columnEntries, './'), 'utf8');
+  return { outputPath: columnsDir, exported, failed };
+}
+
+async function exportProfile(url, deps, opts) {
+  const pageInfo = detectPage(url);
+  if (!pageInfo || pageInfo.type !== 'profile') {
+    throw new Error('不是用户主页 URL');
+  }
+
+  let profileName = pageInfo.id;
+  try {
+    const profileHtml = await fetchHtml(`https://www.zhihu.com/people/${pageInfo.id}`, opts.headers);
+    const dom = new deps.JSDOM(profileHtml, { url: `https://www.zhihu.com/people/${pageInfo.id}` });
+    profileName = getProfileName(dom.window.document, pageInfo.id);
+  } catch (err) {
+    console.warn(`  用户主页信息读取失败，使用 token 作为目录名: ${err.message}`);
+  }
+  const profileDir = path.join(opts.outDir, sanitizeFilename(profileName || pageInfo.id));
+  await mkdir(profileDir, { recursive: true });
+
+  const sections = pageInfo.section === 'all'
+    ? ['answers', 'posts', 'columns']
+    : [pageInfo.section];
+  const summary = [];
+  let exported = 0;
+  let failed = 0;
+
+  console.log(`  用户: ${profileName} (${pageInfo.id})`);
+  for (const section of sections) {
+    let result;
+    if (section === 'answers') {
+      result = await exportMemberAnswers(pageInfo.id, profileDir, profileName, deps, opts);
+      summary.push({ num: summary.length + 1, title: '回答', author: profileName, type: `${result.exported}篇`, filename: '回答/README.md' });
+    } else if (section === 'posts') {
+      result = await exportMemberArticles(pageInfo.id, profileDir, profileName, deps, opts);
+      summary.push({ num: summary.length + 1, title: '文章', author: profileName, type: `${result.exported}篇`, filename: '文章/README.md' });
+    } else if (section === 'columns') {
+      result = await exportMemberColumns(pageInfo.id, profileDir, profileName, deps, opts);
+      summary.push({ num: summary.length + 1, title: '专栏', author: profileName, type: `${result.exported}篇`, filename: '专栏/README.md' });
+    } else {
+      console.warn(`  跳过未知用户主页分区: ${section}`);
+      continue;
+    }
+    exported += result.exported;
+    failed += result.failed;
+  }
+
+  await writeFile(path.join(profileDir, 'README.md'), buildTocMarkdown(profileName, summary, './'), 'utf8');
+  return { outputPath: profileDir, exported, failed };
 }
 
 async function exportOne(url, deps, opts) {
@@ -690,6 +1056,15 @@ async function exportOne(url, deps, opts) {
       imageStats: { ok: 0, total: 0 },
       isCollection: true,
       title: `收藏夹导出 ${result.exported} 篇${result.failed ? `，失败 ${result.failed} 篇` : ''}`,
+    };
+  }
+  if (pageInfo?.type === 'profile') {
+    const result = await exportProfile(url, deps, opts);
+    return {
+      outputPath: result.outputPath,
+      imageStats: { ok: 0, total: 0 },
+      isCollection: true,
+      title: `用户主页导出 ${result.exported} 篇${result.failed ? `，失败 ${result.failed} 项` : ''}`,
     };
   }
   return await exportSinglePage(url, deps, opts);

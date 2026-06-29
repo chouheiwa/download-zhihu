@@ -58,12 +58,47 @@ npm run export:local -- https://zhuanlan.zhihu.com/p/123456
 npm run export:local -- --input urls.txt --out ./zhihu-export
 ```
 
-`urls.txt` 每行一个知乎链接，空行和 `#` 开头的注释会被忽略。当前本地自动导出支持文章、回答、问题、想法和收藏夹页面。收藏夹会导出到 `输出目录/收藏夹名称/articles/`，并生成 `README.md` 索引。
+`urls.txt` 每行一个知乎链接，空行和 `#` 开头的注释会被忽略。当前本地自动导出支持文章、回答、问题、想法、收藏夹页面，以及用户主页的回答、文章、专栏内容。收藏夹会导出到 `输出目录/收藏夹名称/articles/`，并生成 `README.md` 索引。
 
 导出收藏夹示例：
 
 ```bash
 npm run export:local -- https://www.zhihu.com/collection/825550242 --out ./zhihu-export
+```
+
+导出某个用户的公开内容：
+
+```bash
+# 导出全部回答
+npm run export:local -- https://www.zhihu.com/people/mr-dang-77/answers --out ./zhihu-export --cookie-file ./cookie.txt
+
+# 导出全部文章
+npm run export:local -- https://www.zhihu.com/people/mr-dang-77/posts --out ./zhihu-export --cookie-file ./cookie.txt
+
+# 导出全部专栏内容（先读取该用户的专栏列表，再逐个导出专栏文章）
+npm run export:local -- https://www.zhihu.com/people/mr-dang-77/columns --out ./zhihu-export --cookie-file ./cookie.txt
+
+# 也可以传用户主页根路径，一次顺序导出回答、文章、专栏
+npm run export:local -- https://www.zhihu.com/people/mr-dang-77 --out ./zhihu-export --cookie-file ./cookie.txt
+```
+
+用户主页导出的目录结构示例：
+
+```text
+zhihu-export/
+└── mr-dang-77/
+    ├── README.md
+    ├── 回答/
+    │   ├── README.md
+    │   └── articles/
+    ├── 文章/
+    │   ├── README.md
+    │   └── articles/
+    └── 专栏/
+        ├── README.md
+        └── 专栏名称/
+            ├── README.md
+            └── articles/
 ```
 
 如果页面需要登录后才能看到完整内容，可以传入浏览器中的 Cookie：
@@ -110,6 +145,7 @@ npm run export:local -- https://www.zhihu.com/collection/825550242 --out ./zhihu
 | `--cookie <cookie>` | 为请求附加原始 Cookie |
 | `--cookie-file <file>` | 从文件读取原始 Cookie |
 | `--no-images` | 只导出 Markdown，不下载图片 |
+| `--max-pages <n>` | 只拉取前 n 页 API，用于调试；正式全量导出不要传 |
 
 ### 单篇下载
 
