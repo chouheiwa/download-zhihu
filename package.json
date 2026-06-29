@@ -10,6 +10,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "export:local": "node scripts/auto-export.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

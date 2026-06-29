@@ -43,6 +43,74 @@
 
 ## 使用方法
 
+### 本地自动导出（无需安装扩展）
+
+本方式不需要在 Chrome 扩展页加载插件，也不需要点击知乎页面右下角按钮。安装依赖后直接传入知乎链接，脚本会抓取页面、提取正文、下载图片并输出 Markdown 文件。
+
+```bash
+npm ci
+npm run export:local -- https://zhuanlan.zhihu.com/p/123456
+```
+
+默认输出到 `exports/` 目录。也可以批量导出：
+
+```bash
+npm run export:local -- --input urls.txt --out ./zhihu-export
+```
+
+`urls.txt` 每行一个知乎链接，空行和 `#` 开头的注释会被忽略。当前本地自动导出支持文章、回答、问题、想法和收藏夹页面。收藏夹会导出到 `输出目录/收藏夹名称/articles/`，并生成 `README.md` 索引。
+
+导出收藏夹示例：
+
+```bash
+npm run export:local -- https://www.zhihu.com/collection/825550242 --out ./zhihu-export
+```
+
+如果页面需要登录后才能看到完整内容，可以传入浏览器中的 Cookie：
+
+```bash
+npm run export:local -- https://zhuanlan.zhihu.com/p/123456 --cookie "z_c0=..."
+npm run export:local -- https://www.zhihu.com/collection/825550242 --out ./zhihu-export --cookie-file ./cookie.txt
+```
+
+#### 快速获取 Cookie
+
+不要在 Application 面板的 Cookie 表格里逐项复制。更快的方式是从 Network 请求里一次性复制完整 `Cookie` 请求头：
+
+1. 在 Chrome 中打开要导出的知乎收藏夹页面，例如 `https://www.zhihu.com/collection/825550242`。
+2. 打开开发者工具，进入 `Network` 面板。
+3. 刷新页面。
+4. 在请求列表里点击一个知乎请求，优先选择 `api/v4/collections/825550242/items...`；如果没有看到，任意 `www.zhihu.com` 请求通常也可以。
+5. 在右侧 `Headers` 中找到 `Request Headers` 里的 `Cookie: ...`。
+6. 只复制 `Cookie:` 后面的整段内容，不要包含 `Cookie:` 这个字段名。
+7. 在项目根目录创建 `cookie.txt`，把复制到的一整行 Cookie 粘贴进去。
+
+`cookie.txt` 示例格式如下：
+
+```text
+z_c0=...; _xsrf=...; d_c0=...; q_c1=...; SESSIONID=...; JOID=...; osd=...; _zap=...; __zse_ck=...
+```
+
+然后运行：
+
+```bash
+npm run export:local -- https://www.zhihu.com/collection/825550242 --out ./zhihu-export --cookie-file ./cookie.txt
+```
+
+也可以在 `Network` 面板中右键请求，选择 `Copy` → `Copy as cURL`，再从复制出的命令里取出 `-H 'cookie: ...'` 后面的 Cookie 内容。`z_c0` 是知乎登录凭证，请只保存在本机，不要提交到 Git，也不要发给别人。
+
+如果命令提示 `HTTP 401` 或 `HTTP 403`，通常表示 Cookie 没有带上、已过期、复制不完整，或当前账号没有该收藏夹访问权限。重新打开知乎确认已登录，再按上面的 Network 方法复制一次即可。
+
+常用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `--out <dir>` | 指定输出目录，默认 `exports/` |
+| `--input <file>` | 从文本文件读取多个 URL |
+| `--cookie <cookie>` | 为请求附加原始 Cookie |
+| `--cookie-file <file>` | 从文件读取原始 Cookie |
+| `--no-images` | 只导出 Markdown，不下载图片 |
+
 ### 单篇下载
 
 1. 打开任意知乎文章、回答、问题或想法页面
