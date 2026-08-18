@@ -224,7 +224,13 @@
       });
     });
 
-    refs.btn.addEventListener('click', () => handleArticleDownload(data, imgUrls, refs, updateBtnText));
+    refs.btn.addEventListener('click', () => {
+      if (currentDirHandle) {
+        handleSaveToFolder(data, imgUrls, refs, currentDirHandle, pickFolder);
+      } else {
+        handleArticleDownload(data, imgUrls, refs, updateBtnText);
+      }
+    });
 
     // 调试按钮：下载提取到的 HTML 原文
     body.querySelector('#btn-debug').addEventListener('click', () => {
