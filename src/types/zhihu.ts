@@ -74,12 +74,12 @@ export interface ExportProgress {
   collectionId: string;
   collectionName: string;
   articles: {
-    exportedIds: string[];
+    exportedIds: Set<string>;
     totalExported: number;
     batchSize: number;
   };
   comments: {
-    exportedArticles: string[];
+    exportedArticles: Set<string>;
     totalExported: number;
   };
 }

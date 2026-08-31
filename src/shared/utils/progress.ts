@@ -9,6 +9,19 @@ function getFilename(collectionId: string): string {
   return `export-progress-${collectionId}.json`;
 }
 
+/**
+ * 磁盘上存的是数组，读入后统一转 Set 供运行时高效查重（_collection 属性保证类型正确）
+ */
+function normalizeProgress(data: ExportProgress): ExportProgress {
+  if (!(data.articles.exportedIds instanceof Set)) {
+    data.articles.exportedIds = new Set(data.articles.exportedIds ?? []);
+  }
+  if (!(data.comments.exportedArticles instanceof Set)) {
+    data.comments.exportedArticles = new Set(data.comments.exportedArticles ?? []);
+  }
+  return data;
+}
+
 export async function readProgress(
   dirHandle: FileSystemDirectoryHandle,
   collectionId: string,
@@ -18,11 +31,7 @@ export async function readProgress(
     const fileHandle = await dirHandle.getFileHandle(getFilename(collectionId));
     const file = await fileHandle.getFile();
     const text = await file.text();
-    const data: ExportProgress = JSON.parse(text);
-    if (!data.articles.exportedIds) {
-      data.articles.exportedIds = [];
-    }
-    return data;
+    return normalizeProgress(JSON.parse(text) as ExportProgress);
   } catch { /* 新格式不存在 */ }
 
   // 兼容旧格式：读 export-progress.json，验证 collectionId 匹配
@@ -30,11 +39,8 @@ export async function readProgress(
     const fileHandle = await dirHandle.getFileHandle('export-progress.json');
     const file = await fileHandle.getFile();
     const text = await file.text();
-    const data: ExportProgress = JSON.parse(text);
+    const data = normalizeProgress(JSON.parse(text) as ExportProgress);
     if (data.collectionId === collectionId) {
-      if (!data.articles.exportedIds) {
-        data.articles.exportedIds = [];
-      }
       // 迁移：写入新格式文件
       await writeProgress(dirHandle, collectionId, data);
       return data;
@@ -51,7 +57,10 @@ export async function writeProgress(
 ): Promise<void> {
   const fileHandle = await dirHandle.getFileHandle(getFilename(collectionId), { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(JSON.stringify(progressData, null, 2));
+  // Set 无法直接 JSON.stringify，序列化前转回数组以保持磁盘格式
+  await writable.write(JSON.stringify(progressData, (_key, value) => {
+    return value instanceof Set ? Array.from(value) : value;
+  }, 2));
   await writable.close();
 }
 
@@ -63,12 +72,12 @@ export function createInitialProgress(
     collectionId,
     collectionName,
     articles: {
-      exportedIds: [],
+      exportedIds: new Set<string>(),
       totalExported: 0,
       batchSize: 50,
     },
     comments: {
-      exportedArticles: [],
+      exportedArticles: new Set<string>(),
       totalExported: 0,
     },
   };
@@ -80,9 +89,9 @@ export async function addExportedArticle(
   progress: ExportProgress,
   articleId: string,
 ): Promise<void> {
-  if (!progress.articles.exportedIds.includes(articleId)) {
-    progress.articles.exportedIds.push(articleId);
-    progress.articles.totalExported = progress.articles.exportedIds.length;
+  if (!progress.articles.exportedIds.has(articleId)) {
+    progress.articles.exportedIds.add(articleId);
+    progress.articles.totalExported = progress.articles.exportedIds.size;
   }
   await writeProgress(dirHandle, collectionId, progress);
 }
@@ -93,9 +102,9 @@ export async function updateCommentProgress(
   progress: ExportProgress,
   articleId: string,
 ): Promise<void> {
-  if (!progress.comments.exportedArticles.includes(articleId)) {
-    progress.comments.exportedArticles.push(articleId);
-    progress.comments.totalExported = progress.comments.exportedArticles.length;
+  if (!progress.comments.exportedArticles.has(articleId)) {
+    progress.comments.exportedArticles.add(articleId);
+    progress.comments.totalExported = progress.comments.exportedArticles.size;
   }
   await writeProgress(dirHandle, collectionId, progress);
 }

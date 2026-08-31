@@ -228,7 +228,13 @@ export async function fetchChildComments(rootCommentId: string): Promise<ZhihuCo
   while (nextUrl) {
     const response = await apiFetch(nextUrl);
     if (!response.ok) {
-      throw new Error(`子评论请求失败: ${response.status}`);
+      // 统一抛 ApiError 并携带 httpStatus，供上层统一判断限流
+      throw new ApiError(
+        response.status === 403
+          ? '请求被知乎限流（HTTP 403），可能需要完成验证码验证。请在知乎页面完成验证后重试。'
+          : `子评论请求失败: ${response.status}`,
+        response.status
+      );
     }
 
     const data = await response.json() as any;
@@ -266,7 +272,7 @@ export async function fetchAllComments(
         comment.child_comments = await fetchChildComments(comment.id);
       } catch (err: any) {
         // 403 被限流时中断整个评论获取，提示用户
-        if (err.httpStatus === 403 || err.message?.includes('403')) {
+        if (err instanceof ApiError && err.httpStatus === 403) {
           rateLimited = true;
           comment.child_comments = [];
           break;
@@ -314,7 +320,9 @@ export async function checkPaidAccess(type: string, id: string): Promise<boolean
 
 /**
  * 获取单篇文章/回答的完整内容
- * 访问文章页面，从 initialData 和 DOM 两个来源提取，取更长的
+ * 访问文章页面，从 initialData 提取完整内容
+ * （知乎为客户端渲染，服务端 HTML 不含已渲染正文节点，
+ *   故不提供 DOM 兜底来源）
  * 与单篇导出使用相同的逻辑
  */
 export async function fetchFullContent(type: string, itemUrl: string): Promise<string | null> {
@@ -329,31 +337,21 @@ export async function fetchFullContent(type: string, itemUrl: string): Promise<s
   const pageInfo = detectPage(itemUrl);
   if (!pageInfo) return null;
 
-  // 来源 1：从 initialData 提取
-  let fromData = '';
+  // 从 initialData 提取
   const scriptMatch = pageHtml.match(/<script\s+id="js-initialData"\s+type="text\/json">([^<]+)<\/script>/);
-  if (scriptMatch) {
-    try {
-      const initialData = JSON.parse(scriptMatch[1]);
-      if (type === 'article') {
-        fromData = initialData?.initialState?.entities?.articles?.[pageInfo.id]?.content || '';
-      } else if (type === 'answer') {
-        fromData = initialData?.initialState?.entities?.answers?.[pageInfo.id]?.content || '';
-      }
-    } catch { /* 解析失败 */ }
-  }
+  if (!scriptMatch) return null;
 
-  // 来源 2：从 DOM 提取
-  let fromDOM = '';
-  const doc = new DOMParser().parseFromString(pageHtml, 'text/html');
-  if (type === 'article') {
-    fromDOM = doc.querySelector('.Post-RichText')?.innerHTML || '';
-  } else if (type === 'answer') {
-    fromDOM = doc.querySelector('.RichContent-inner')?.innerHTML || '';
-  }
+  try {
+    const initialData = JSON.parse(scriptMatch[1]);
+    if (type === 'article') {
+      return initialData?.initialState?.entities?.articles?.[pageInfo.id]?.content || null;
+    }
+    if (type === 'answer') {
+      return initialData?.initialState?.entities?.answers?.[pageInfo.id]?.content || null;
+    }
+  } catch { /* 解析失败 */ }
 
-  // 取更长的
-  return fromDOM.length > fromData.length ? fromDOM : (fromData || null);
+  return null;
 }
 
 // ============================

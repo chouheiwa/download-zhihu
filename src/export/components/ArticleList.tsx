@@ -72,6 +72,8 @@ export function ArticleList({
 
   // 获取收藏夹/专栏总篇数
   const [totalCount, setTotalCount] = useState<number | null>(null);
+  // 是否为链接卡片/视频/脚注及知乎词条链接追加超链接（默认关闭，减少文档噪声）
+  const [appendLinks, setAppendLinks] = useState(false);
   useEffect(() => {
     const fetchFn = sourceType === 'profile' ? fetchProfilePage : sourceType === 'column' ? fetchColumnPage : fetchCollectionPage;
     fetchFn(collectionApiUrl)
@@ -180,6 +182,7 @@ export function ArticleList({
 
     const currentFormat = store.format;
     const currentDocxImgMode = store.docxImageMode;
+    const currentAppendLinks = appendLinks;
     const currentWantImg = currentFormat === 'md' ? store.wantImages : (currentDocxImgMode === 'embed');
     const currentDirHandle = store.dirHandle;
     const currentProgressData = store.progressData;
@@ -328,7 +331,7 @@ export function ArticleList({
                 }
               }
 
-              let md = htmlToMarkdown(item.html || '', imageMapping);
+              let md = htmlToMarkdown(item.html || '', imageMapping, { appendLinks: currentAppendLinks });
               md = buildFrontmatter(item) + md;
               await writeTextFile(articlesFolder, filename, md);
             }
@@ -374,6 +377,7 @@ export function ArticleList({
   }, [
     collectionId,
     collectionName,
+    appendLinks,
     fetchDirectoryPages,
     updateReadme,
     addLog,
@@ -419,6 +423,14 @@ export function ArticleList({
           <Typography.Text style={{ fontSize: 13 }}>下载图片</Typography.Text>
           <Switch checked={wantImages} onChange={setWantImages} size="small" />
         </div>
+        {format === 'md' && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography.Text style={{ fontSize: 13 }}>
+              链接卡片/视频/脚注及词条链接追加超链接
+            </Typography.Text>
+            <Switch checked={appendLinks} onChange={setAppendLinks} size="small" />
+          </div>
+        )}
       </Space>
 
       <Divider style={{ margin: '8px 0' }} />

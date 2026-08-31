@@ -141,7 +141,7 @@ async function reconcileProgress(
 
     if (foundIds.size !== oldIds.size || ![...foundIds].every((id: string) => oldIds.has(id))) {
       addLog(`文章 ID 校准：${oldIds.size} → ${foundIds.size}（以实际文件为准）`, 'warn');
-      progressData.articles.exportedIds = Array.from(foundIds);
+      progressData.articles.exportedIds = foundIds;
       progressData.articles.totalExported = foundIds.size;
       changed = true;
     }
@@ -150,7 +150,7 @@ async function reconcileProgress(
     const actualCommentCount = commentedFiles.size;
     if (oldCommentCount !== actualCommentCount) {
       addLog(`评论计数校准：${oldCommentCount} → ${actualCommentCount}（以实际文件为准）`, 'warn');
-      progressData.comments.exportedArticles = Array.from(commentedFiles);
+      progressData.comments.exportedArticles = commentedFiles;
       progressData.comments.totalExported = actualCommentCount;
       changed = true;
     }
