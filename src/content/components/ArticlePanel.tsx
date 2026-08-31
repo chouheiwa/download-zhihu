@@ -43,6 +43,7 @@ export function ArticlePanel({ content, pageInfo }: ArticlePanelProps) {
   const [wantFm, setWantFm] = useState(true);
   const [wantComment, setWantComment] = useState(false);
   const [wantImages, setWantImages] = useState(true);
+  const [appendLinks, setAppendLinks] = useState(false);
   const [docxImgMode, setDocxImgMode] = useState<'embed' | 'link'>('embed');
   const [isExporting, setIsExporting] = useState(false);
   const [statusText, setStatusText] = useState('');
@@ -138,7 +139,7 @@ export function ArticlePanel({ content, pageInfo }: ArticlePanelProps) {
 
         addLog('正在转换 Markdown...');
         showProgress(1, 1, '正在生成 Markdown...');
-        let md = htmlToMarkdown(content.html, imageMapping);
+        let md = htmlToMarkdown(content.html, imageMapping, { appendLinks });
         const mdTextLen = md.length;
         if (wantFm) md = buildFrontmatter(content) + md;
         addLog(`Markdown 生成完成: ${mdTextLen} 字符（含FM: ${md.length}）`);
@@ -271,7 +272,7 @@ export function ArticlePanel({ content, pageInfo }: ArticlePanelProps) {
       setIsExporting(false);
     }
   }, [
-    format, wantFm, wantComment, wantImages, docxImgMode,
+    format, wantFm, wantComment, wantImages, docxImgMode, appendLinks,
     content, pageInfo, imgUrls, addLog, showProgress, hideProgress,
   ]);
 
@@ -317,7 +318,7 @@ export function ArticlePanel({ content, pageInfo }: ArticlePanelProps) {
 
         addLog('正在转换 Markdown...');
         setStatusText('正在生成 Markdown...');
-        let md = htmlToMarkdown(content.html, imageMapping);
+        let md = htmlToMarkdown(content.html, imageMapping, { appendLinks });
         if (wantFm) md = buildFrontmatter(content) + md;
 
         if (wantComment) {
@@ -421,7 +422,7 @@ export function ArticlePanel({ content, pageInfo }: ArticlePanelProps) {
       setIsExporting(false);
     }
   }, [
-    format, wantFm, wantComment, wantImages, docxImgMode,
+    format, wantFm, wantComment, wantImages, docxImgMode, appendLinks,
     content, pageInfo, imgUrls, dirHandle, pickFolder, verifyDirHandle,
     addLog, showProgress, hideProgress,
   ]);
@@ -465,6 +466,11 @@ export function ArticlePanel({ content, pageInfo }: ArticlePanelProps) {
       <Checkbox checked={wantComment} onChange={(e) => setWantComment(e.target.checked)}>
         导出评论区
       </Checkbox>
+      {format === 'md' && (
+        <Checkbox checked={appendLinks} onChange={(e) => setAppendLinks(e.target.checked)}>
+          为链接卡片/视频/脚注追加超链接
+        </Checkbox>
+      )}
 
       {/* Progress */}
       {progress && <Progress percent={progress.percent} size="small" />}

@@ -78,13 +78,32 @@ export function inferImageExtension(url: string, contentType?: string): string {
 }
 
 /**
+ * 转换选项
+ */
+export interface HtmlToMarkdownOptions {
+  /**
+   * 是否为特殊内容（知乎链接卡片、视频占位、脚注/参考链接）以及
+   * 知乎词条自动链接（zhida.zhihu.com/search?...）追加 http/https 超链接。
+   * 默认 true（保留超链接）。
+   * 设置为 false 可减少文档噪声，仅保留文案。
+   */
+  appendLinks?: boolean;
+}
+
+/**
  * 将知乎 HTML 内容转换为 Markdown
  * @param html - 知乎文章的 HTML 内容
  * @param imageMapping - URL -> 本地路径的映射表，用于替换图片路径
+ * @param options - 转换选项
  * @returns Markdown 格式文本
  */
-export function htmlToMarkdown(html: string, imageMapping?: Record<string, string>): string {
+export function htmlToMarkdown(
+  html: string,
+  imageMapping?: Record<string, string>,
+  options?: HtmlToMarkdownOptions
+): string {
   if (!html || typeof html !== 'string') return '';
+  const appendLinks = options?.appendLinks ?? true;
 
   try {
     const turndownService = new TurndownService({
@@ -205,7 +224,11 @@ export function htmlToMarkdown(html: string, imageMapping?: Record<string, strin
       replacement(_content: string, node: TurndownService.Node) {
         const el = node as unknown as HTMLElement;
         const info = getFootnoteInfo(el);
-        footnotes[info.numero] = `${info.text} ${info.url}`;
+        if (appendLinks && info.url) {
+          footnotes[info.numero] = `${info.text} ${info.url}`;
+        } else {
+          footnotes[info.numero] = info.text;
+        }
         return `[^${info.numero}]`;
       },
     });
@@ -215,7 +238,9 @@ export function htmlToMarkdown(html: string, imageMapping?: Record<string, strin
       filter: (node: HTMLElement) => isVideo(node),
       replacement(_content: string, node: TurndownService.Node) {
         const info = getVideoInfo(node as unknown as Element);
-        return `[${info.title}](${info.href})`;
+        return appendLinks && info.href
+          ? `[${info.title}](${info.href})`
+          : info.title;
       },
     });
 
@@ -224,11 +249,31 @@ export function htmlToMarkdown(html: string, imageMapping?: Record<string, strin
       filter: (node: HTMLElement) => isLinkCard(node),
       replacement(_content: string, node: TurndownService.Node) {
         const info = getLinkCardInfo(node as unknown as Element);
-        return `[${info.title}](${info.href})`;
+        return appendLinks && info.href
+          ? `[${info.title}](${info.href})`
+          : info.title;
       },
     });
 
-    // 规则 10：普通 img 标签（非数学公式）也需要路径映射
+    // 规则 10：知乎词条自动链接（zhida.zhihu.com/search?...）
+    // 知乎把正文中普通名词自动渲染成指向自身词条搜索页的 <a>，
+    // hover 弹词条解释，对文档是纯噪声。
+    // appendLinks=false 时剥成纯文本；关闭时保留（默认行为）
+    turndownService.addRule('zhihuEntityLink', {
+      filter: (node: HTMLElement) =>
+        node.nodeName === 'A' &&
+        /^https?:\/\/zhida\.zhihu\.com\/search\?/i.test(node.getAttribute('href') || ''),
+      replacement(content: string, node: TurndownService.Node) {
+        // appendLinks=false：剥成纯文本
+        if (!appendLinks) return content;
+        // appendLinks=true：复刻默认 inlineLink 的输出
+        const el = node as unknown as HTMLElement;
+        const href = el.getAttribute('href') || '';
+        return `[${content}](${href})`;
+      },
+    });
+
+    // 规则 11：普通 img 标签（非数学公式）也需要路径映射
     turndownService.addRule('imgWithMapping', {
       filter: (node: HTMLElement) =>
         node.nodeName === 'IMG' && !isMath(node) && !node.closest('figure'),

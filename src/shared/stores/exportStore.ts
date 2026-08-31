@@ -47,21 +47,23 @@ export const useExportStore = create<ExportState>((set) => ({
   setExportProgress: (p) => set({ exportProgress: p }),
   markArticleExported: (id) => set((s) => {
     if (!s.progressData) return s;
-    const ids = [...s.progressData.articles.exportedIds, id];
+    const ids = new Set(s.progressData.articles.exportedIds);
+    ids.add(id);
     return {
       progressData: {
         ...s.progressData,
-        articles: { ...s.progressData.articles, exportedIds: ids, totalExported: ids.length },
+        articles: { ...s.progressData.articles, exportedIds: ids, totalExported: ids.size },
       },
     };
   }),
   markCommentExported: (id) => set((s) => {
     if (!s.progressData) return s;
-    const articles = [...s.progressData.comments.exportedArticles, id];
+    const articles = new Set(s.progressData.comments.exportedArticles);
+    articles.add(id);
     return {
       progressData: {
         ...s.progressData,
-        comments: { ...s.progressData.comments, exportedArticles: articles, totalExported: articles.length },
+        comments: { ...s.progressData.comments, exportedArticles: articles, totalExported: articles.size },
       },
     };
   }),
